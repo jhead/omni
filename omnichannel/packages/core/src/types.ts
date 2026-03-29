@@ -2,7 +2,8 @@
  * Pure domain types — no I/O, MCP, or transport imports.
  */
 
-export type OmnichannelPluginId = 'generic_webhook' | string
+/** Use the workspace package name (no scope), e.g. `channel-webhook`, `channel-discord`. */
+export type OmnichannelPluginId = 'channel-webhook' | 'channel-discord' | string
 
 /** Normalized event the Gateway enqueues and the MCP host receives. */
 export interface OmnichannelEvent {

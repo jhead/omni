@@ -1,3 +1,5 @@
+export { getCapabilitySetsForChannels } from './capabilities.ts'
+
 export type {
   CapabilitySet,
   OmniDispatchAction,

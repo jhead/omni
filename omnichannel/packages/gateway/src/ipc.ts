@@ -4,8 +4,6 @@ import { existsSync, unlinkSync } from 'node:fs'
 
 import type { CapabilitySet, OmnichannelEvent } from '@omnibot/core'
 
-import type { LoadedConfig } from './config.ts'
-
 export type IpcDispatchInbound = {
   replyHandle: string
   action: string
@@ -220,15 +218,15 @@ export class IpcHub {
 }
 
 export function createIpcHub(opts: {
-  config: LoadedConfig
   socketPath: string
+  sharedSecret?: string | null
   getCapabilities: () => CapabilitySet[]
   onClientReady?: () => void
   onDispatch?: (input: IpcDispatchInbound) => Promise<DispatchResult>
 }): IpcHub {
   return new IpcHub({
     socketPath: opts.socketPath,
-    sharedSecret: opts.config.gateway.sharedSecret,
+    sharedSecret: opts.sharedSecret,
     getCapabilities: opts.getCapabilities,
     onClientReady: opts.onClientReady,
     onDispatch: opts.onDispatch,

@@ -105,7 +105,7 @@ export async function startDiscordBot(
     const event: OmnichannelEvent = {
       id: crypto.randomUUID(),
       channelId: omniChannelId,
-      plugin: 'discord',
+      plugin: 'channel-discord',
       receivedAt: new Date().toISOString(),
       payload: buildDiscordMessagePayload(msg, replyHandle, omniChannelId),
     }

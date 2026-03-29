@@ -3,125 +3,119 @@ import { resolve } from 'node:path'
 
 import { parse as parseYaml } from 'yaml'
 
-import type { CapabilitySet, OmniDispatchAction, OmnichannelPluginId } from '@omnibot/core'
+/**
+ * Process / transport / storage only. No channel plugins, no Discord/webhook semantics.
+ */
 
-export interface ChannelConfig {
-  plugin: OmnichannelPluginId
-  /** Discord: guild text / thread channel snowflake to subscribe to. */
-  discordChannelId?: string
-  /** Discord: optional bot token on this channel (see also top-level `discord.token`). */
-  token?: string
+export interface GatewaySection {
+  httpHostname?: string
+  httpPort: number
+  ipcSocketPath: string
+  dbPath: string
+  sharedSecret?: string | null
+  queueTtlSeconds?: number
+  replyHandleTtlSeconds?: number
 }
 
-export interface GatewayYaml {
-  /**
-   * Optional Discord defaults. `discord.token` is checked before `DISCORD_BOT_TOKEN`
-   * (or `gateway.discordBotTokenEnv`).
-   */
-  discord?: {
-    token?: string
-  }
-  gateway: {
-    /** Bind address. Default `127.0.0.1` (localhost only). Use `0.0.0.0` only if you intend LAN/WAN exposure. */
-    httpHostname?: string
-    httpPort: number
-    ipcSocketPath: string
-    dbPath: string
-    sharedSecret?: string | null
-    queueTtlSeconds?: number
-    /** Env var name for the Discord bot token (default `DISCORD_BOT_TOKEN`). */
-    discordBotTokenEnv?: string
-    /** Reply-handle row TTL in seconds (default 604800 = 7d). */
-    replyHandleTtlSeconds?: number
-  }
-  channels: Record<string, ChannelConfig>
-}
+/** Each channel row must include `plugin`; other keys are opaque to the gateway. */
+export type ChannelRow = { plugin: string } & Record<string, unknown>
 
-export interface LoadedConfig extends GatewayYaml {
+export interface LoadedGatewayConfig {
   configPath: string
+  gateway: GatewaySection
+  channels: Record<string, ChannelRow>
+  /** Full parsed `omni.yaml` root — consumers (host process) read plugin-specific keys. */
+  document: Record<string, unknown>
 }
 
-function actionsForPlugin(plugin: OmnichannelPluginId): OmniDispatchAction[] {
-  if (plugin === 'generic_webhook') return ['noop']
-  if (plugin === 'discord') return ['reply', 'react', 'ack', 'noop']
-  return ['reply', 'react', 'ack', 'resolve', 'noop']
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return x !== null && typeof x === 'object' && !Array.isArray(x)
 }
 
-function capabilityForChannel(
-  channelId: string,
-  plugin: OmnichannelPluginId,
-): CapabilitySet {
-  const ingress = true
-  const egress = plugin !== 'generic_webhook'
-  return {
-    channelId,
-    plugin,
-    ingress,
-    egress,
-    actions: actionsForPlugin(plugin),
+export function parseGatewayDocument(root: unknown): Omit<
+  LoadedGatewayConfig,
+  'configPath'
+> {
+  if (!isRecord(root)) {
+    throw new Error('omni config: root must be a mapping')
   }
+  const gw = root.gateway
+  if (!isRecord(gw)) {
+    throw new Error('omni config: missing gateway section')
+  }
+  const httpPort = gw.httpPort
+  const ipcSocketPath = gw.ipcSocketPath
+  const dbPath = gw.dbPath
+  if (typeof httpPort !== 'number' || typeof ipcSocketPath !== 'string') {
+    throw new Error(
+      'omni config: gateway must set httpPort (number) and ipcSocketPath (string)',
+    )
+  }
+  if (typeof dbPath !== 'string') {
+    throw new Error('omni config: gateway.dbPath must be a string')
+  }
+
+  const gateway: GatewaySection = {
+    httpHostname:
+      typeof gw.httpHostname === 'string' ? gw.httpHostname : undefined,
+    httpPort,
+    ipcSocketPath,
+    dbPath,
+    sharedSecret:
+      gw.sharedSecret === undefined
+        ? undefined
+        : gw.sharedSecret === null
+          ? null
+          : typeof gw.sharedSecret === 'string'
+            ? gw.sharedSecret
+            : String(gw.sharedSecret),
+    queueTtlSeconds:
+      typeof gw.queueTtlSeconds === 'number' ? gw.queueTtlSeconds : undefined,
+    replyHandleTtlSeconds:
+      typeof gw.replyHandleTtlSeconds === 'number'
+        ? gw.replyHandleTtlSeconds
+        : undefined,
+  }
+
+  const ch = root.channels
+  if (!isRecord(ch)) {
+    throw new Error('omni config: channels must be a mapping')
+  }
+
+  const channels: Record<string, ChannelRow> = {}
+  for (const [id, row] of Object.entries(ch)) {
+    if (!isRecord(row) || typeof row.plugin !== 'string') {
+      throw new Error(
+        `omni config: channels.${id} must be an object with a string plugin field`,
+      )
+    }
+    channels[id] = row as ChannelRow
+  }
+
+  return { gateway, channels, document: root }
 }
 
-export function getCapabilities(config: LoadedConfig): CapabilitySet[] {
-  return Object.entries(config.channels).map(([channelId, ch]) =>
-    capabilityForChannel(channelId, ch.plugin),
+export function loadGatewayConfig(path?: string): LoadedGatewayConfig {
+  const configPath = resolve(
+    path ?? process.env.OMNI_CONFIG ?? 'omni.yaml',
   )
+  if (!existsSync(configPath)) {
+    throw new Error(
+      `omni config: file not found: ${configPath}\n` +
+        `  Set OMNI_CONFIG or create omni.yaml (see omni.yaml.example).`,
+    )
+  }
+  const raw = readFileSync(configPath, 'utf8')
+  const doc = parseYaml(raw) as unknown
+  const parsed = parseGatewayDocument(doc)
+  return { configPath, ...parsed }
 }
 
-export function resolveGatewayIpcSocketPath(config: LoadedConfig): string {
+export function resolveGatewayIpcSocketPath(config: LoadedGatewayConfig): string {
   const raw = config.gateway.ipcSocketPath.trim()
   if (!raw) {
     throw new Error('gateway.ipcSocketPath is empty')
   }
   if (raw.startsWith('/')) return raw
   return resolve(process.cwd(), raw)
-}
-
-export function getDiscordBotToken(config: LoadedConfig): string | null {
-  const top = config.discord?.token?.trim()
-  if (top) return top
-
-  for (const ch of Object.values(config.channels)) {
-    if (ch.plugin === 'discord' && ch.token?.trim()) {
-      return ch.token.trim()
-    }
-  }
-
-  const envName = config.gateway.discordBotTokenEnv ?? 'DISCORD_BOT_TOKEN'
-  const fromEnv = process.env[envName]?.trim()
-  return fromEnv || null
-}
-
-export function loadConfig(path?: string): LoadedConfig {
-  const configPath = resolve(
-    path ?? process.env.OMNI_CONFIG ?? 'omni.yaml',
-  )
-  if (!existsSync(configPath)) {
-    throw new Error(
-      `omnichannel gateway: config not found: ${configPath}\n` +
-        `  Set OMNI_CONFIG or create omni.yaml (see omni.yaml.example).`,
-    )
-  }
-  const raw = readFileSync(configPath, 'utf8')
-  const doc = parseYaml(raw) as GatewayYaml
-  if (!doc.gateway?.httpPort || !doc.gateway.ipcSocketPath || !doc.gateway.dbPath) {
-    throw new Error(
-      'omnichannel gateway: omni.yaml must define gateway.httpPort, gateway.ipcSocketPath, gateway.dbPath',
-    )
-  }
-  if (!doc.channels || typeof doc.channels !== 'object') {
-    throw new Error('omnichannel gateway: omni.yaml must define channels')
-  }
-
-  for (const [name, ch] of Object.entries(doc.channels)) {
-    if (ch.plugin === 'discord') {
-      if (!ch.discordChannelId?.trim()) {
-        throw new Error(
-          `omnichannel gateway: channels.${name} (discord) requires discordChannelId`,
-        )
-      }
-    }
-  }
-
-  return { ...doc, configPath }
 }

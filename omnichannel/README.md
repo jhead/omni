@@ -12,7 +12,7 @@ You do **not** need a separate plugin package: register the MCP server directly,
    bun install
    ```
 
-2. **Gateway** — in another terminal, keep the gateway running so the IPC socket exists (see `omni.yaml` / `OMNI_IPC_SOCKET`):
+2. **Gateway** — in another terminal, run the host entry (`gateway-host.ts`) so the IPC socket exists (see `omni.yaml` / `OMNI_IPC_SOCKET`). The `@omnibot/gateway` library is channel-agnostic; this repo’s host wires Discord and webhooks via runtime `import()`.
 
    ```bash
    bun run gateway

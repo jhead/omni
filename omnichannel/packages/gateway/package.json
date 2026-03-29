@@ -2,12 +2,16 @@
   "name": "@omnibot/gateway",
   "version": "0.0.0",
   "type": "module",
+  "bin": {
+    "omnibot-gateway": "./src/cli.ts"
+  },
   "exports": {
     ".": "./src/index.ts"
   },
+  "scripts": {
+    "gateway": "bun run src/cli.ts"
+  },
   "dependencies": {
-    "@omnibot/channel-discord": "workspace:*",
-    "@omnibot/channel-webhook": "workspace:*",
     "@omnibot/core": "workspace:*",
     "yaml": "^2.8.0"
   }

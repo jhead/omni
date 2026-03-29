@@ -6,6 +6,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@omnibot/core": "workspace:*"
+    "@omnibot/core": "workspace:*",
+    "@omnibot/gateway": "workspace:*"
   }
 }
