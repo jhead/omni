@@ -17,8 +17,8 @@ import {
   insertReplyHandle,
 } from '@omnibot/gateway'
 
-import { createDiscordClient, startDiscordBot } from './bot.ts'
-import type { DiscordRuntime } from './bot.ts'
+import { createDiscordClient } from './bot.ts'
+import type { DiscordRuntime, StartDiscordBotOptions } from './bot.ts'
 import {
   assertDiscordChannelsHaveIds,
   getDiscordBotToken,
@@ -32,7 +32,7 @@ export interface DiscordHostModule {
   assertDiscordChannelsHaveIds: typeof assertDiscordChannelsHaveIds
   getDiscordBotToken: typeof getDiscordBotToken
   createDiscordClient: typeof createDiscordClient
-  startDiscordBot: typeof startDiscordBot
+  startDiscordBot: (options: StartDiscordBotOptions) => Promise<DiscordRuntime>
   executeDiscordDispatch: typeof executeDiscordDispatch
 }
 
@@ -96,6 +96,7 @@ export function createGatewayPluginHost(
   options: GatewayPluginHostContext,
 ): GatewayPluginHost {
   const mod = moduleExports as unknown as DiscordHostModule
+  const dlog = options.debugLog
   const subscriptions = parseDiscordSubscriptions(options.channels)
   const tokenSrc = () =>
     tokenSourceFromDocument(options.channels, options.document)
@@ -104,9 +105,17 @@ export function createGatewayPluginHost(
   let runtime: DiscordRuntime | null = null
 
   const prepare = (): void => {
-    if (subscriptions.length === 0) return
+    dlog?.log('discord', 'prepare', {
+      subscriptions: subscriptions.length,
+      channelIds: subscriptions.map(s => s.omniChannelId),
+    })
+    if (subscriptions.length === 0) {
+      dlog?.log('discord', 'prepare skip (no discord channel subscriptions)')
+      return
+    }
     mod.assertDiscordChannelsHaveIds({ channels: options.channels })
     const token = mod.getDiscordBotToken(tokenSrc())
+    dlog?.log('discord', 'token resolved', { hasToken: Boolean(token) })
     if (!token) {
       throw new Error(
         'Discord channels are configured but no bot token was found. Set DISCORD_BOT_TOKEN (or gateway.discordBotTokenEnv).',
@@ -118,6 +127,7 @@ export function createGatewayPluginHost(
     if (subscriptions.length === 0) return
     const token = mod.getDiscordBotToken(tokenSrc())
     if (!token) return
+    dlog?.log('discord', 'afterHubReady: startDiscordBot')
     const store = wrapDiscordStore(io.db)
     const hub = wrapDiscordHub(io.hub)
     runtime = await mod.startDiscordBot({
@@ -127,6 +137,10 @@ export function createGatewayPluginHost(
       client: mod.createDiscordClient(),
       token,
       replyHandleTtlMs,
+      debugLog: dlog,
+    })
+    dlog?.log('discord', 'afterHubReady: bot running', {
+      userId: runtime.client.user?.id,
     })
   }
 
@@ -138,18 +152,27 @@ export function createGatewayPluginHost(
     if (route.kind !== 'discord') return null
     const client = runtime?.client
     if (!client) {
+      dlog?.log('discord', 'tryDispatchRoute: client not running')
       return { ok: false, error: 'discord client not running' }
     }
+    dlog?.log('discord', 'tryDispatchRoute', {
+      route,
+      action,
+      args,
+    })
     try {
       const detail = await mod.executeDiscordDispatch(
         client,
         route as DiscordRouteData,
         action,
         args,
+        dlog,
       )
+      dlog?.log('discord', 'tryDispatchRoute ok', { detail })
       return { ok: true, detail }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
+      dlog?.log('discord', 'tryDispatchRoute error', { error: msg })
       return { ok: false, error: msg }
     }
   }

@@ -4,6 +4,8 @@ import { existsSync, unlinkSync } from 'node:fs'
 
 import type { CapabilitySet, OmnichannelEvent } from '@omnibot/core'
 
+import type { GatewayDebugLogger } from './debug-log.ts'
+
 export type IpcDispatchInbound = {
   replyHandle: string
   action: string
@@ -32,6 +34,7 @@ export interface IpcHubOptions {
   getCapabilities: () => CapabilitySet[]
   onClientReady?: () => void
   onDispatch?: (input: IpcDispatchInbound) => Promise<DispatchResult>
+  debugLog?: GatewayDebugLogger
 }
 
 export class IpcHub {
@@ -81,6 +84,17 @@ export class IpcHub {
   }
 
   broadcast(msg: IpcOutbound): void {
+    const log = this.options.debugLog
+    if (log?.enabled && msg.type === 'event') {
+      log.log('ipc', 'broadcast event', {
+        id: msg.event.id,
+        channelId: msg.event.channelId,
+        plugin: msg.event.plugin,
+        clients: this.sockets.size,
+      })
+    } else if (log?.enabled) {
+      log.log('ipc', 'broadcast', msg)
+    }
     const line = `${JSON.stringify(msg)}\n`
     const dead: Socket[] = []
     for (const s of this.sockets) {
@@ -96,6 +110,7 @@ export class IpcHub {
   }
 
   private attachSocket(socket: Socket): void {
+    this.options.debugLog?.log('ipc', 'socket attached')
     this.buffers.set(socket, '')
     socket.on('data', chunk => {
       const prev = this.buffers.get(socket) ?? ''
@@ -122,6 +137,9 @@ export class IpcHub {
     try {
       msg = JSON.parse(line) as IpcInbound
     } catch {
+      this.options.debugLog?.log('ipc', 'invalid JSON line', {
+        preview: line.slice(0, 200),
+      })
       this.send(socket, {
         type: 'error',
         message: 'invalid JSON',
@@ -130,11 +148,14 @@ export class IpcHub {
     }
 
     if (!msg || typeof msg !== 'object' || !('type' in msg)) {
+      this.options.debugLog?.log('ipc', 'message missing type', { msg })
       this.send(socket, { type: 'error', message: 'missing type' })
       return
     }
 
     const m = msg as IpcInbound
+    this.options.debugLog?.log('ipc', `inbound type=${m.type}`, loggableInbound(m))
+
     if (m.type === 'hello') {
       const secret = this.options.sharedSecret
       if (secret && m.token !== secret) {
@@ -144,6 +165,9 @@ export class IpcHub {
       }
       this.sockets.add(socket)
       this.send(socket, { type: 'hello_ack' })
+      this.options.debugLog?.log('ipc', 'hello accepted', {
+        clients: this.sockets.size,
+      })
       this.options.onClientReady?.()
       return
     }
@@ -156,9 +180,13 @@ export class IpcHub {
         })
         return
       }
+      const caps = this.options.getCapabilities()
+      this.options.debugLog?.log('ipc', 'get_context reply', {
+        channelSets: caps.length,
+      })
       this.send(socket, {
         type: 'context',
-        channels: this.options.getCapabilities(),
+        channels: caps,
       })
       return
     }
@@ -197,6 +225,7 @@ export class IpcHub {
         return
       }
       void onDispatch({ replyHandle, action, args }).then(r => {
+        this.options.debugLog?.log('ipc', 'dispatch result', r)
         if (r.ok) {
           this.send(socket, { type: 'dispatch_ack', ok: true, detail: r.detail })
         } else {
@@ -206,6 +235,9 @@ export class IpcHub {
       return
     }
 
+    this.options.debugLog?.log('ipc', 'unknown message type', {
+      type: (m as { type: string }).type,
+    })
     this.send(socket, {
       type: 'error',
       message: `unknown type: ${String((m as { type: string }).type)}`,
@@ -213,8 +245,34 @@ export class IpcHub {
   }
 
   private send(socket: Socket, msg: IpcOutbound): void {
+    const log = this.options.debugLog
+    if (log?.enabled) {
+      if (msg.type === 'event') {
+        log.log('ipc', 'outbound type=event', {
+          id: msg.event.id,
+          channelId: msg.event.channelId,
+          plugin: msg.event.plugin,
+        })
+      } else {
+        log.log('ipc', `outbound type=${msg.type}`, msg)
+      }
+    }
     socket.write(`${JSON.stringify(msg)}\n`)
   }
+}
+
+function loggableInbound(m: IpcInbound): Record<string, unknown> {
+  if (m.type === 'hello') {
+    return {
+      type: m.type,
+      version: m.version,
+      token: m.token ? '(redacted)' : undefined,
+    }
+  }
+  if (m.type === 'dispatch') {
+    return { type: m.type, replyHandle: m.replyHandle, action: m.action, args: m.args }
+  }
+  return { type: m.type }
 }
 
 export function createIpcHub(opts: {
@@ -223,6 +281,7 @@ export function createIpcHub(opts: {
   getCapabilities: () => CapabilitySet[]
   onClientReady?: () => void
   onDispatch?: (input: IpcDispatchInbound) => Promise<DispatchResult>
+  debugLog?: GatewayDebugLogger
 }): IpcHub {
   return new IpcHub({
     socketPath: opts.socketPath,
@@ -230,5 +289,6 @@ export function createIpcHub(opts: {
     getCapabilities: opts.getCapabilities,
     onClientReady: opts.onClientReady,
     onDispatch: opts.onDispatch,
+    debugLog: opts.debugLog,
   })
 }

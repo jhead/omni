@@ -1,4 +1,5 @@
 import type { LoadedGatewayConfig } from './config.ts'
+import type { GatewayDebugLogger } from './debug-log.ts'
 import type { DispatchResult } from './ipc.ts'
 import type { GatewayIo } from './run.ts'
 
@@ -10,6 +11,8 @@ export interface GatewayPluginHostContext {
   /** Parsed `omni.yaml` root (plugin-specific keys live here). */
   document: Record<string, unknown>
   replyHandleTtlMs: number
+  /** Set by `omnibot-gateway --debug`; channel plugins may log extra detail. */
+  debugLog?: GatewayDebugLogger
 }
 
 /** Passed to {@link GatewayPluginHost.handleHttp} (e.g. webhook ingress, future channel HTTP). */

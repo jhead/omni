@@ -14,3 +14,8 @@ export type {
   GatewayPluginHostContext,
   GatewayPluginHttpContext,
 } from './host-plugin.ts'
+export {
+  createGatewayDebugLogger,
+  summarizeConfigForDebug,
+  type GatewayDebugLogger,
+} from './debug-log.ts'

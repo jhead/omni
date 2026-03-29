@@ -6,6 +6,7 @@ import {
 } from 'discord.js'
 
 import type { OmnichannelEvent } from '@omnibot/core'
+import type { GatewayDebugLogger } from '@omnibot/gateway'
 
 import type { DiscordIngressHub, DiscordIngressStore } from './types.ts'
 import type { DiscordRouteData } from './route.ts'
@@ -24,6 +25,7 @@ export interface StartDiscordBotOptions {
   client: Client
   token: string
   replyHandleTtlMs: number
+  debugLog?: GatewayDebugLogger
 }
 
 function buildDiscordMessagePayload(
@@ -74,12 +76,17 @@ export async function startDiscordBot(
     client,
     token,
     replyHandleTtlMs,
+    debugLog: dlog,
   } = options
 
   const discordChannels = new Map<string, string>()
   for (const s of subscriptions) {
     discordChannels.set(s.discordChannelId, s.omniChannelId)
   }
+
+  dlog?.log('discord', 'bot: subscriptions map', {
+    discordChannelIds: [...discordChannels.keys()],
+  })
 
   client.on('messageCreate', (msg: Message) => {
     if (msg.author.bot) return
@@ -112,6 +119,15 @@ export async function startDiscordBot(
 
     store.insertQueuedEvent(event, expiresAt)
 
+    dlog?.log('discord', 'messageCreate → omnichannel event', {
+      omniChannelId,
+      discordChannelId: msg.channelId,
+      messageId: msg.id,
+      replyHandle,
+      ipcClients: hub.clientCount,
+      broadcast: hub.clientCount > 0,
+    })
+
     if (hub.clientCount > 0) {
       hub.broadcastEvent(event)
       store.deleteQueuedEvent(event.id)
@@ -120,13 +136,23 @@ export async function startDiscordBot(
 
   client.once('clientReady', c => {
     process.stderr.write(`omnichannel channel-discord: connected as ${c.user.tag}\n`)
+    dlog?.log('discord', 'clientReady', {
+      tag: c.user.tag,
+      userId: c.user.id,
+      guilds: c.guilds.cache.size,
+    })
   })
 
   client.on('error', err => {
     process.stderr.write(`omnichannel channel-discord: client error: ${err}\n`)
+    dlog?.log('discord', 'client error', {
+      message: err instanceof Error ? err.message : String(err),
+    })
   })
 
+  dlog?.log('discord', 'client.login (starting)')
   await client.login(token)
+  dlog?.log('discord', 'client.login (promise resolved)')
 
   return {
     client,
