@@ -3,6 +3,7 @@ import {
   GatewayIntentBits,
   Partials,
   type Message,
+  type ThreadChannel,
 } from 'discord.js'
 
 import type { OmnichannelEvent } from '@omnibot/core'
@@ -90,7 +91,14 @@ export async function startDiscordBot(
 
   client.on('messageCreate', (msg: Message) => {
     if (msg.author.bot) return
-    const omniChannelId = discordChannels.get(msg.channelId)
+
+    // For threads, look up by the parent channel ID so that threads off a
+    // configured channel are routed to the same omni channel.
+    const lookupChannelId = msg.channel.isThread()
+      ? ((msg.channel as ThreadChannel).parentId ?? msg.channelId)
+      : msg.channelId
+
+    const omniChannelId = discordChannels.get(lookupChannelId)
     if (!omniChannelId) return
 
     const replyHandle = newReplyHandleId()
