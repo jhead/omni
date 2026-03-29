@@ -1,7 +1,12 @@
-import type { CapabilitySet, OmniDispatchAction, OmnichannelPluginId } from './types.ts'
+import type {
+  CapabilitySet,
+  OmniDispatchAction,
+  OmnichannelPluginId,
+} from '@omnibot/core'
 
 function actionsForPlugin(plugin: string): OmniDispatchAction[] {
-  if (plugin === 'channel-webhook') return ['noop']
+  if (plugin === 'channel-webhook' || plugin === 'channel-alertmanager')
+    return ['noop']
   if (plugin === 'channel-discord') return ['reply', 'react', 'ack', 'noop']
   return ['reply', 'react', 'ack', 'resolve', 'noop']
 }
@@ -11,7 +16,8 @@ function capabilityForChannel(
   plugin: string,
 ): CapabilitySet {
   const ingress = true
-  const egress = plugin !== 'channel-webhook'
+  const egress =
+    plugin !== 'channel-webhook' && plugin !== 'channel-alertmanager'
   return {
     channelId,
     plugin: plugin as OmnichannelPluginId,

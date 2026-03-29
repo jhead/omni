@@ -6,11 +6,9 @@
  * Config path is the first non-flag argument, or `OMNI_CONFIG` / default `omni.yaml`.
  */
 
-import {
-  getCapabilitySetsForChannels,
-  validateOmniDispatch,
-} from '@omnibot/core'
+import { validateOmniDispatch } from '@omnibot/core'
 
+import { getCapabilitySetsForChannels } from './channel-capabilities.ts'
 import {
   createGatewayDebugLogger,
   summarizeConfigForDebug,

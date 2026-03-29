@@ -4,13 +4,14 @@
   "type": "module",
   "workspaces": ["packages/*", "packages/channels/*"],
   "dependencies": {
+    "@omnibot/channel-alertmanager": "workspace:*",
     "@omnibot/channel-discord": "workspace:*",
     "@omnibot/channel-webhook": "workspace:*",
     "@omnibot/core": "workspace:*",
     "@omnibot/gateway": "workspace:*"
   },
   "scripts": {
-    "test": "bun test packages/core tests/integration",
+    "test": "bun test packages/core packages/channels/alertmanager tests/integration",
     "test:core": "bun test packages/core",
     "test:integration": "bun test tests/integration",
     "gateway": "bun run packages/gateway/src/cli.ts",

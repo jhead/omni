@@ -2,6 +2,7 @@
  * @omnibot/gateway — IPC, SQLite ingress, HTTP bind. Channel plugins are loaded by `src/cli.ts` from YAML.
  */
 
+export { getCapabilitySetsForChannels } from './channel-capabilities.ts'
 export * from './config.ts'
 export * from './db.ts'
 export * from './http-listener.ts'

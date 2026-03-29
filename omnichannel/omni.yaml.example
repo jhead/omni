@@ -23,6 +23,12 @@ channels:
   demo:
     plugin: channel-webhook
 
+  # Package: `@omnibot/channel-alertmanager` → POST http://<host>:<port>/alertmanager/<channelId>
+  # Optional: `bearerToken` — then Alertmanager must send Authorization: Bearer <token> (see http_config bearer_token).
+  # alerts:
+  #   plugin: channel-alertmanager
+  #   # bearerToken: "shared-secret"
+
   # Package: `@omnibot/channel-discord` → plugin id `channel-discord`.
   # If you see "Used disallowed intents": Developer Portal → Bot → Privileged Gateway Intents →
   # enable MESSAGE CONTENT INTENT (required to read message text). Guilds + GuildMessages + GuildMessageReactions are non-privileged.
