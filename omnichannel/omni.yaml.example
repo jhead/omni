@@ -1,0 +1,11 @@
+# Copy to omni.yaml. `ipcSocketPath` is resolved against the process cwd (run `bun run gateway` from the project dir).
+gateway:
+  httpPort: 8080
+  ipcSocketPath: ./omni-gateway.sock
+  dbPath: ./data/omni.sqlite
+  sharedSecret: null
+  queueTtlSeconds: 86400
+
+channels:
+  demo:
+    plugin: generic_webhook
