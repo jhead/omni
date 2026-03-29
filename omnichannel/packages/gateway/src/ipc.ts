@@ -2,7 +2,7 @@ import type { Socket } from 'node:net'
 import { createServer } from 'node:net'
 import { existsSync, unlinkSync } from 'node:fs'
 
-import type { CapabilitySet, OmnichannelEvent } from '@omnichannel/core'
+import type { CapabilitySet, OmnichannelEvent } from '@omnibot/core'
 
 import type { LoadedConfig } from './config.ts'
 

@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite'
 import { existsSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 
-import type { OmnichannelEvent } from '@omnichannel/core'
+import type { OmnichannelEvent } from '@omnibot/core'
 
 export function openDatabase(dbPath: string): Database {
   const dir = dirname(dbPath)

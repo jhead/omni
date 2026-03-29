@@ -3,7 +3,7 @@
  *
  * Agent completion gates:
  * - `bun test` (npm script `test`) — must exit 0 for core + harness smoke; canonical loop until green.
- * - `test:core` — `@omnichannel/core` only (`validateOmniDispatch`, PLAN §6).
+ * - `test:core` — `@omnibot/core` only (`validateOmniDispatch`, PLAN §6).
  * - `test:integration` — harness helpers + future gateway tests under `tests/integration/`.
  * - Phase 1 E2E (webhook → queue → IPC → MCP): add subprocess tests when packages exist; optionally
  *   require `RUN_PHASE1_E2E=1` in CI so default `test` stays fast. Do not use blanket `describe.skip`

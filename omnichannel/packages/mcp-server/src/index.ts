@@ -6,7 +6,7 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { validateOmniDispatch, type OmnichannelEvent } from '@omnichannel/core'
+import { validateOmniDispatch, type OmnichannelEvent } from '@omnibot/core'
 import { z } from 'zod'
 
 import { OmniIpcClient } from './ipc-client.ts'

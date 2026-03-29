@@ -1,4 +1,4 @@
-import type { OmnichannelEvent } from '@omnichannel/core'
+import type { OmnichannelEvent } from '@omnibot/core'
 
 /** Gateway injects DB writes for ingress + reply-handle rows. */
 export interface DiscordIngressStore {

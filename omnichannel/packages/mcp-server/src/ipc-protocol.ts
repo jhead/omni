@@ -1,6 +1,6 @@
 /** Mirrors gateway `ipc.ts` wire types (shared manually so `core` stays I/O-free). */
 
-import type { CapabilitySet, OmnichannelEvent } from '@omnichannel/core'
+import type { CapabilitySet, OmnichannelEvent } from '@omnibot/core'
 
 export type IpcInbound =
   | { type: 'hello'; token?: string; version?: number }

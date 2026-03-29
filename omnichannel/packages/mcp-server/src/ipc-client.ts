@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { connect as netConnect, type Socket } from 'node:net'
 
-import type { CapabilitySet, OmnichannelEvent } from '@omnichannel/core'
+import type { CapabilitySet, OmnichannelEvent } from '@omnibot/core'
 
 import type { IpcInbound, IpcOutbound } from './ipc-protocol.ts'
 

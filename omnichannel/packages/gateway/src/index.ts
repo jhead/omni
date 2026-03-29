@@ -12,9 +12,10 @@ import {
   startDiscordBot,
   type DiscordRouteData,
   type DiscordRuntime,
-} from '@omnichannel/channel-discord'
-import type { OmnichannelEvent } from '@omnichannel/core'
-import { validateOmniDispatch } from '@omnichannel/core'
+} from '@omnibot/channel-discord'
+import { handleWebhookPost } from '@omnibot/channel-webhook'
+import type { OmnichannelEvent } from '@omnibot/core'
+import { validateOmniDispatch } from '@omnibot/core'
 
 import {
   getCapabilities,
@@ -33,9 +34,8 @@ import {
   openDatabase,
 } from './db.ts'
 import { jsonResponse } from './http-util.ts'
+import { serveGatewayHttp } from './http-listener.ts'
 import { createIpcHub, type IpcHub } from './ipc.ts'
-import type { WebhookIngressContext } from './webhooks.ts'
-import { handleWebhookPost } from './webhooks.ts'
 
 async function main(): Promise<void> {
   const config = loadConfig(process.argv[2])
@@ -147,14 +147,33 @@ async function main(): Promise<void> {
   }
   setInterval(gc, 5 * 60 * 1000)
 
-  const ingressCtx: WebhookIngressContext = {
-    config,
-    db,
-    hub,
+  const httpHostname = config.gateway.httpHostname?.trim() || '127.0.0.1'
+
+  const ingressCtx = {
     ttlMs,
+    resolveChannel: (channelId: string) => {
+      const ch = config.channels[channelId]
+      if (!ch) return null
+      return { plugin: ch.plugin }
+    },
+    hooks: {
+      insertQueuedEvent(event: OmnichannelEvent, expiresAt: number): void {
+        dbInsertQueuedEvent(db, event, expiresAt)
+      },
+      deleteQueuedEvent(id: string): void {
+        dbDeleteQueuedEvent(db, id)
+      },
+      getIpcClientCount(): number {
+        return hub.clientCount
+      },
+      broadcastEvent(event: OmnichannelEvent): void {
+        hub.broadcast({ type: 'event', event })
+      },
+    },
   }
 
-  const server = Bun.serve({
+  const server = serveGatewayHttp({
+    hostname: httpHostname,
     port: config.gateway.httpPort,
     fetch(req): Promise<Response> {
       if (req.method !== 'POST') {
@@ -165,7 +184,7 @@ async function main(): Promise<void> {
   })
 
   process.stderr.write(
-    `omnichannel gateway: listening http://127.0.0.1:${server.port} ` +
+    `omnichannel gateway: listening http://${httpHostname}:${server.port} ` +
       `ipc ${ipcPath} db=${dbPath}\n`,
   )
 }

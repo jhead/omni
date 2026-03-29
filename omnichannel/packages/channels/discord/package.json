@@ -1,12 +1,12 @@
 {
-  "name": "@omnichannel/channel-discord",
+  "name": "@omnibot/channel-discord",
   "version": "0.0.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@omnichannel/core": "workspace:*",
+    "@omnibot/core": "workspace:*",
     "discord.js": "^14.25.1"
   }
 }

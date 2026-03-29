@@ -1,5 +1,5 @@
 {
-  "name": "@omnichannel/mcp-server",
+  "name": "@omnibot/mcp-server",
   "version": "0.0.0",
   "type": "module",
   "exports": {
@@ -7,7 +7,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.0",
-    "@omnichannel/core": "workspace:*",
+    "@omnibot/core": "workspace:*",
     "yaml": "^2.8.0",
     "zod": "3"
   }

@@ -8,6 +8,7 @@ discord:
   # token: "your-bot-token"
 
 gateway:
+  # httpHostname: "127.0.0.1"   # default: localhost only. Set to "0.0.0.0" to listen on all interfaces.
   httpPort: 8080
   ipcSocketPath: ./omni-gateway.sock
   dbPath: ./data/omni.sqlite

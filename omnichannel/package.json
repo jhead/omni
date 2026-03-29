@@ -1,5 +1,5 @@
 {
-  "name": "omnichannel",
+  "name": "@omnibot/omni",
   "private": true,
   "type": "module",
   "workspaces": ["packages/*", "packages/channels/*"],

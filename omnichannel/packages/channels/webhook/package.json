@@ -1,11 +1,11 @@
 {
-  "name": "@omnibot/core",
+  "name": "@omnibot/channel-webhook",
   "version": "0.0.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "ajv": "^8.18.0"
+    "@omnibot/core": "workspace:*"
   }
 }

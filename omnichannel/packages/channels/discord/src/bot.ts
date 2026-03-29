@@ -5,7 +5,7 @@ import {
   type Message,
 } from 'discord.js'
 
-import type { OmnichannelEvent } from '@omnichannel/core'
+import type { OmnichannelEvent } from '@omnibot/core'
 
 import type { DiscordIngressHub, DiscordIngressStore } from './types.ts'
 import type { DiscordRouteData } from './route.ts'

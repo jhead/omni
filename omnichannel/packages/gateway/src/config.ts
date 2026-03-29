@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 
 import { parse as parseYaml } from 'yaml'
 
-import type { CapabilitySet, OmniDispatchAction, OmnichannelPluginId } from '@omnichannel/core'
+import type { CapabilitySet, OmniDispatchAction, OmnichannelPluginId } from '@omnibot/core'
 
 export interface ChannelConfig {
   plugin: OmnichannelPluginId
@@ -22,6 +22,8 @@ export interface GatewayYaml {
     token?: string
   }
   gateway: {
+    /** Bind address. Default `127.0.0.1` (localhost only). Use `0.0.0.0` only if you intend LAN/WAN exposure. */
+    httpHostname?: string
     httpPort: number
     ipcSocketPath: string
     dbPath: string

@@ -1,13 +1,14 @@
 {
-  "name": "@omnichannel/gateway",
+  "name": "@omnibot/gateway",
   "version": "0.0.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@omnichannel/channel-discord": "workspace:*",
-    "@omnichannel/core": "workspace:*",
+    "@omnibot/channel-discord": "workspace:*",
+    "@omnibot/channel-webhook": "workspace:*",
+    "@omnibot/core": "workspace:*",
     "yaml": "^2.8.0"
   }
 }
