@@ -9,7 +9,7 @@
     "test:integration": "bun test tests/integration",
     "gateway": "bun run packages/gateway/src/index.ts",
     "mcp": "bun run packages/mcp-server/src/index.ts",
-    "claude-channel": "bun run packages/claude-channel/src/start.ts",
+    "omni": "bun run packages/mcp-server/src/index.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
