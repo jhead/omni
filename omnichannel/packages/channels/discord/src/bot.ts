@@ -143,6 +143,28 @@ export async function startDiscordBot(
     return discordChannels.get(lookupId)
   }
 
+  // Typing indicator: repeat sendTyping() every 8s so the indicator stays visible
+  // while Claude is processing. Cancelled when the bot's own reply appears.
+  const typingIntervals = new Map<string, ReturnType<typeof setInterval>>()
+
+  function startTyping(channelId: string, channel: { sendTyping?: () => Promise<void> }): void {
+    stopTyping(channelId)
+    if (!channel.sendTyping) return
+    void channel.sendTyping().catch(() => {})
+    const interval = setInterval(() => {
+      void channel.sendTyping?.().catch(() => {})
+    }, 8_000)
+    typingIntervals.set(channelId, interval)
+  }
+
+  function stopTyping(channelId: string): void {
+    const interval = typingIntervals.get(channelId)
+    if (interval !== undefined) {
+      clearInterval(interval)
+      typingIntervals.delete(channelId)
+    }
+  }
+
   function emitEvent(event: OmnichannelEvent, expiresAt: number): void {
     store.insertQueuedEvent(event, expiresAt)
     if (hub.clientCount > 0) {
@@ -152,6 +174,11 @@ export async function startDiscordBot(
   }
 
   client.on('messageCreate', async (msg: Message) => {
+    // Stop typing indicator when the bot sends its reply
+    if (msg.author.id === client.user?.id) {
+      stopTyping(msg.channelId)
+      return
+    }
     if (msg.author.bot) return
 
     const omniChannelId = lookupOmniChannel(msg.channelId, msg.channel)
@@ -187,6 +214,7 @@ export async function startDiscordBot(
     })
 
     emitEvent(event, expiresAt)
+    startTyping(msg.channelId, msg.channel)
   })
 
   client.on('messageReactionAdd', async (reaction: MessageReaction | PartialMessageReaction, user: User | PartialUser) => {
