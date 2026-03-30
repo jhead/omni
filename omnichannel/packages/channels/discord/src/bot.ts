@@ -143,26 +143,14 @@ export async function startDiscordBot(
     return discordChannels.get(lookupId)
   }
 
-  // Typing indicator: repeat sendTyping() every 8s so the indicator stays visible
-  // while Claude is processing. Cancelled when the bot's own reply appears.
-  const typingIntervals = new Map<string, ReturnType<typeof setInterval>>()
-
+  // Typing indicator: single one-shot sendTyping() call (~10s natural Discord expiry).
   function startTyping(channelId: string, channel: { sendTyping?: () => Promise<void> }): void {
-    stopTyping(channelId)
     if (!channel.sendTyping) return
     void channel.sendTyping().catch(() => {})
-    const interval = setInterval(() => {
-      void channel.sendTyping?.().catch(() => {})
-    }, 8_000)
-    typingIntervals.set(channelId, interval)
   }
 
-  function stopTyping(channelId: string): void {
-    const interval = typingIntervals.get(channelId)
-    if (interval !== undefined) {
-      clearInterval(interval)
-      typingIntervals.delete(channelId)
-    }
+  function stopTyping(_channelId: string): void {
+    // Nothing to cancel — Discord typing expires naturally.
   }
 
   function emitEvent(event: OmnichannelEvent, expiresAt: number): void {
