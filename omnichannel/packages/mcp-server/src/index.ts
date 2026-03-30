@@ -6,7 +6,7 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { validateOmniDispatch, type OmnichannelEvent } from '@omnibot/core'
+import type { OmnichannelEvent } from '@omnibot/core'
 import { z } from 'zod'
 
 import { OmniIpcClient } from './ipc-client.ts'
@@ -37,15 +37,10 @@ function eventToChannelParams(event: OmnichannelEvent): {
 const omniContextInput = z.object({})
 
 const omniDispatchInput = z.object({
-  replyHandle: z.string().max(64),
-  action: z.enum(['reply', 'react', 'ack', 'resolve', 'noop']),
-  args: z.record(z.unknown()),
-})
-
-const omniCallInput = z.object({
-  channelId: z.string(),
-  method: z.string(),
-  args: z.record(z.unknown()).default({}),
+  channelId: z.string().describe('The omni channel ID to invoke the capability on'),
+  capability: z.string().describe('The capability name (e.g. reply, react, send_message, fetch_history)'),
+  args: z.record(z.unknown()).default({}).describe('Arguments for the capability (schema varies per capability — check omni_context)'),
+  replyHandle: z.string().max(64).optional().describe('Required for capabilities where requiresReplyHandle is true'),
 })
 
 async function main(): Promise<void> {
@@ -64,10 +59,8 @@ async function main(): Promise<void> {
       },
       instructions:
         'Omnichannel events arrive as <channel source="omnichannel" event_id="..." channel_id="..." plugin="...">. ' +
-        'They are two-way: use `omni_context` to see channels, valid actions, and channel-specific calls; ' +
-        'use `omni_dispatch` with the `reply_handle` from the event payload (when present) to reply or react on the originating platform; ' +
-        'use `omni_call` to invoke channel-specific capabilities such as fetch_history or download_attachment — ' +
-        'call `omni_context` first to discover what calls are available per channel.',
+        'Call `omni_context` first to discover each channel\'s capabilities with their arg schemas and whether a replyHandle is required. ' +
+        'Then use `omni_dispatch` to invoke any capability — pass replyHandle from the event payload when the capability requires it.',
     },
   )
 
@@ -117,18 +110,13 @@ async function main(): Promise<void> {
     {
       title: 'Omnichannel context',
       description:
-        'Call this first when handling omni events to discover available actions and channel-specific calls (ingress/egress, allowed actions, omni_call methods).',
+        'Call this first when handling omni events. Returns each channel\'s capabilities with arg schemas and replyHandle requirements.',
       inputSchema: omniContextInput,
     },
     async () => {
       const channels = await ipc.getContext()
       return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({ channels }, null, 2),
-          },
-        ],
+        content: [{ type: 'text', text: JSON.stringify({ channels }, null, 2) }],
       }
     },
   )
@@ -138,79 +126,32 @@ async function main(): Promise<void> {
     {
       title: 'Omnichannel dispatch',
       description:
-        'Single outbound verb: reply, react, ack, resolve, or noop. Core validates payload; platform egress is phased by channel type.',
+        'Invoke a channel capability by name. Check omni_context for available capabilities, their arg schemas, and whether replyHandle is required.',
       inputSchema: omniDispatchInput,
     },
     async (args: unknown) => {
-      const v = validateOmniDispatch(args)
-      if (!v.ok) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Validation failed:\n${v.errors.join('\n')}`,
-            },
-          ],
-          isError: true,
-        }
-      }
-      const r = await ipc.dispatch({
-        replyHandle: v.value.replyHandle,
-        action: v.value.action,
-        args: v.value.args,
-      })
-      if (!r.ok) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: r.error ?? 'dispatch failed',
-            },
-          ],
-          isError: true,
-        }
-      }
-      return {
-        content: [
-          {
-            type: 'text',
-            text: r.detail ?? 'ok',
-          },
-        ],
-      }
-    },
-  )
-
-  registerTool(
-    'omni_call',
-    {
-      title: 'Omnichannel channel call',
-      description:
-        'Invoke a channel-specific capability by name. Available methods depend on the channel plugin ' +
-        '(e.g. discord: fetch_history, download_attachment). Returns JSON data on success.',
-      inputSchema: omniCallInput,
-    },
-    async (args: unknown) => {
-      const v = omniCallInput.safeParse(args)
+      const v = omniDispatchInput.safeParse(args)
       if (!v.success) {
         return {
           content: [{ type: 'text', text: `Validation failed:\n${v.error.message}` }],
           isError: true,
         }
       }
-      const r = await ipc.call({
+      const r = await ipc.invoke({
         channelId: v.data.channelId,
-        method: v.data.method,
+        capability: v.data.capability,
         args: v.data.args,
+        replyHandle: v.data.replyHandle,
       })
       if (!r.ok) {
         return {
-          content: [{ type: 'text', text: r.error ?? 'call failed' }],
+          content: [{ type: 'text', text: r.error ?? 'invoke failed' }],
           isError: true,
         }
       }
+      const text = r.data !== undefined ? JSON.stringify(r.data, null, 2) : 'ok'
       return {
-        content: [{ type: 'text', text: JSON.stringify(r.data, null, 2) }],
+        content: [{ type: 'text', text }],
       }
     },
   )

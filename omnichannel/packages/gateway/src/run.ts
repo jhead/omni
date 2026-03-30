@@ -18,10 +18,8 @@ import type { GatewayDebugLogger } from './debug-log.ts'
 import { serveGatewayHttp } from './http-listener.ts'
 import {
   createIpcHub,
-  type CallResult,
-  type DispatchResult,
-  type IpcCallInbound,
-  type IpcDispatchInbound,
+  type InvokeResult,
+  type IpcInvokeInbound,
   type IpcHub,
 } from './ipc.ts'
 
@@ -33,8 +31,7 @@ export interface GatewayIo {
 export interface StartGatewayOptions {
   config: LoadedGatewayConfig
   getCapabilities: () => CapabilitySet[]
-  onDispatch: (input: IpcDispatchInbound, io: GatewayIo) => Promise<DispatchResult>
-  onCall?: (input: IpcCallInbound, io: GatewayIo) => Promise<CallResult>
+  onInvoke: (input: IpcInvokeInbound, io: GatewayIo) => Promise<InvokeResult>
   fetch: (req: Request, io: GatewayIo) => Response | Promise<Response>
   /** Runs after IPC hub is listening, before HTTP bind. */
   afterHubReady?: (io: GatewayIo) => Promise<void>
@@ -44,7 +41,7 @@ export interface StartGatewayOptions {
 
 /**
  * IPC hub, SQLite ingress queue, periodic GC, HTTP listener.
- * Callers supply capabilities, HTTP `fetch`, and dispatch handling.
+ * Callers supply capabilities, HTTP `fetch`, and invoke handling.
  */
 export async function startGateway(options: StartGatewayOptions): Promise<GatewayIo> {
   const { config } = options
@@ -60,9 +57,7 @@ export async function startGateway(options: StartGatewayOptions): Promise<Gatewa
   const flushQueue = (): void => {
     const now = Date.now()
     const pending = listPendingEvents(db, now)
-    dbg?.log('gateway', 'flushQueue (onClientReady)', {
-      pending: pending.length,
-    })
+    dbg?.log('gateway', 'flushQueue (onClientReady)', { pending: pending.length })
     for (const event of pending) {
       hub.broadcast({ type: 'event', event })
       dbDeleteQueuedEvent(db, event.id)
@@ -74,8 +69,7 @@ export async function startGateway(options: StartGatewayOptions): Promise<Gatewa
     sharedSecret: config.gateway.sharedSecret,
     getCapabilities: options.getCapabilities,
     onClientReady: flushQueue,
-    onDispatch: d => options.onDispatch(d, { db, hub }),
-    onCall: options.onCall ? d => options.onCall!(d, { db, hub }) : undefined,
+    onInvoke: d => options.onInvoke(d, { db, hub }),
     debugLog: dbg,
   })
 
@@ -95,27 +89,19 @@ export async function startGateway(options: StartGatewayOptions): Promise<Gatewa
     if (dbg?.enabled) {
       dbg.log('gateway', 'gc', { ingress: nq, reply_handles: nr, at: now })
     } else if (nq > 0 || nr > 0) {
-      process.stderr.write(
-        `omnichannel gateway: gc ingress=${nq} reply_handles=${nr}\n`,
-      )
+      process.stderr.write(`omnichannel gateway: gc ingress=${nq} reply_handles=${nr}\n`)
     }
   }
   setInterval(gc, 5 * 60 * 1000)
 
   const httpHostname = config.gateway.httpHostname?.trim() || '127.0.0.1'
-  dbg?.log('gateway', 'binding HTTP', {
-    hostname: httpHostname,
-    port: config.gateway.httpPort,
-  })
+  dbg?.log('gateway', 'binding HTTP', { hostname: httpHostname, port: config.gateway.httpPort })
 
   const server = serveGatewayHttp({
     hostname: httpHostname,
     port: config.gateway.httpPort,
     fetch: async req => {
-      dbg?.log('http', 'request', {
-        method: req.method,
-        url: req.url,
-      })
+      dbg?.log('http', 'request', { method: req.method, url: req.url })
       const res = await options.fetch(req, io)
       dbg?.log('http', 'response', { status: res.status })
       return res

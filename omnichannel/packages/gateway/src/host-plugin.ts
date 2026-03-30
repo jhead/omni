@@ -1,7 +1,11 @@
+import type { CapabilityDef } from '@omnibot/core'
+
 import type { LoadedGatewayConfig } from './config.ts'
 import type { GatewayDebugLogger } from './debug-log.ts'
-import type { CallResult, DispatchResult } from './ipc.ts'
+import type { InvokeResult } from './ipc.ts'
 import type { GatewayIo } from './run.ts'
+
+export type { InvokeResult }
 
 /**
  * Shared contract for `@omnibot/channel-*` packages loaded by the gateway host process.
@@ -15,35 +19,36 @@ export interface GatewayPluginHostContext {
   debugLog?: GatewayDebugLogger
 }
 
-/** Passed to {@link GatewayPluginHost.handleHttp} (e.g. webhook ingress, future channel HTTP). */
+/** Passed to {@link GatewayPluginHost.handleHttp} (e.g. webhook ingress). */
 export interface GatewayPluginHttpContext {
   ttlMs: number
   config: LoadedGatewayConfig
 }
 
-export { CallResult }
+export interface InvokeContext {
+  /** Omni channel ID the invoke is addressed to. */
+  channelId: string
+  capability: string
+  args: Record<string, unknown>
+  /** Parsed route_json from the reply_handles table. Present when a replyHandle was supplied. */
+  route?: Record<string, unknown>
+}
 
 export interface GatewayPluginHost {
-  /** Methods this plugin exposes via `omni_call`. Reported in `omni_context`. */
-  calls?: string[]
+  /**
+   * Capabilities this plugin exposes, keyed by capability name.
+   * Reported verbatim in `omni_context` so Claude knows what to call and with what args.
+   */
+  capabilities: Record<string, CapabilityDef>
   prepare(): void
   afterHubReady(io: GatewayIo): Promise<void>
-  tryDispatchRoute(
-    route: { kind?: string },
-    action: string,
-    args: Record<string, unknown>,
-  ): Promise<DispatchResult | null>
   /**
-   * Optional channel capability call (e.g. fetch_history, download_attachment).
-   * Return `null` to defer to the next plugin.
+   * Handle an invoke for a channel this plugin owns.
+   * Return `null` to defer to the next plugin (e.g. wrong channelId).
    */
-  tryCall?(
-    channelId: string,
-    method: string,
-    args: Record<string, unknown>,
-  ): Promise<CallResult | null>
+  invoke(ctx: InvokeContext): Promise<InvokeResult | null>
   /**
-   * Optional HTTP ingress. Return `null` to defer to the next plugin; otherwise the response is sent.
+   * Optional HTTP ingress. Return `null` to defer to the next plugin.
    */
   handleHttp?(
     req: Request,

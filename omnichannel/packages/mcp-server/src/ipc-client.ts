@@ -22,8 +22,8 @@ export class OmniIpcClient {
     resolve: (msg: IpcOutbound) => void
     reject: (e: Error) => void
   }> = []
-  private readonly pendingCalls = new Map<string, {
-    resolve: (msg: Extract<IpcOutbound, { type: 'call_result' }>) => void
+  private readonly pendingInvokes = new Map<string, {
+    resolve: (msg: Extract<IpcOutbound, { type: 'invoke_result' }>) => void
     reject: (e: Error) => void
   }>()
 
@@ -49,9 +49,7 @@ export class OmniIpcClient {
         this.firstConnectReject = reject
       })
       void this.runConnectionLoop().catch(e => {
-        this.firstConnectReject?.(
-          e instanceof Error ? e : new Error(String(e)),
-        )
+        this.firstConnectReject?.(e instanceof Error ? e : new Error(String(e)))
       })
     }
     await this.firstConnectPromise
@@ -61,7 +59,7 @@ export class OmniIpcClient {
   stop(): void {
     if (this.stopped) return
     this.stopped = true
-    this.rejectAllControlWaiters(new Error('IPC client stopped'))
+    this.rejectAllWaiters(new Error('IPC client stopped'))
     try {
       this.socket?.destroy()
     } catch {
@@ -93,53 +91,27 @@ export class OmniIpcClient {
     }
   }
 
-  async dispatch(payload: {
-    replyHandle: string
-    action: string
-    args: Record<string, unknown>
-  }): Promise<{ ok: boolean; detail?: string; error?: string }> {
-    await this.waitUntilConnected()
-    const s = this.socket
-    if (!s) throw new Error('IPC not connected')
-    const req: IpcInbound = {
-      type: 'dispatch',
-      replyHandle: payload.replyHandle,
-      action: payload.action,
-      args: payload.args,
-    }
-    s.write(`${JSON.stringify(req)}\n`)
-    while (true) {
-      const msg = await this.nextControl()
-      if (msg.type === 'dispatch_ack') {
-        return {
-          ok: msg.ok,
-          detail: msg.detail,
-          error: msg.error,
-        }
-      }
-      if (msg.type === 'error') throw new Error(msg.message)
-    }
-  }
-
-  async call(payload: {
+  async invoke(payload: {
     channelId: string
-    method: string
+    capability: string
     args: Record<string, unknown>
+    replyHandle?: string
   }): Promise<{ ok: boolean; data?: unknown; error?: string }> {
     await this.waitUntilConnected()
     const s = this.socket
     if (!s) throw new Error('IPC not connected')
     const id = crypto.randomUUID()
     const req: IpcInbound = {
-      type: 'call',
+      type: 'invoke',
       id,
       channelId: payload.channelId,
-      method: payload.method,
+      capability: payload.capability,
       args: payload.args,
+      ...(payload.replyHandle ? { replyHandle: payload.replyHandle } : {}),
     }
     s.write(`${JSON.stringify(req)}\n`)
     return new Promise((resolve, reject) => {
-      this.pendingCalls.set(id, {
+      this.pendingInvokes.set(id, {
         resolve: msg => resolve({ ok: msg.ok, data: msg.data, error: msg.error }),
         reject,
       })
@@ -147,8 +119,7 @@ export class OmniIpcClient {
   }
 
   private async runConnectionLoop(): Promise<void> {
-    let initial =
-      this.options.reconnectInitialDelayMs ?? 1000
+    const initial = this.options.reconnectInitialDelayMs ?? 1000
     const maxBackoff = this.options.reconnectMaxDelayMs ?? 30_000
     let backoff = initial
     let firstResolved = false
@@ -185,20 +156,13 @@ export class OmniIpcClient {
       const fail = (e: Error) => {
         if (handshakeDone) return
         handshakeDone = true
-        this.rejectAllControlWaiters(e)
-        try {
-          s.destroy()
-        } catch {
-          // ignore
-        }
+        this.rejectAllWaiters(e)
+        try { s.destroy() } catch { /* ignore */ }
         reject(e)
       }
 
       s.on('data', chunk => this.appendChunk(chunk.toString('utf8')))
-
-      const onEarlyError = (err: Error) => {
-        fail(err)
-      }
+      const onEarlyError = (err: Error) => { fail(err) }
       s.on('error', onEarlyError)
 
       s.on('connect', () => {
@@ -211,14 +175,10 @@ export class OmniIpcClient {
         try {
           const msg = await this.nextControl()
           if (msg.type === 'error') throw new Error(msg.message)
-          if (msg.type !== 'hello_ack') {
-            throw new Error(`expected hello_ack, got ${msg.type}`)
-          }
+          if (msg.type !== 'hello_ack') throw new Error(`expected hello_ack, got ${msg.type}`)
           handshakeDone = true
           s.removeListener('error', onEarlyError)
-          const onEnd = () => {
-            this.onSocketClosed(s)
-          }
+          const onEnd = () => { this.onSocketClosed(s) }
           s.on('close', onEnd)
           s.on('error', onEnd)
           this.socket = s
@@ -237,7 +197,7 @@ export class OmniIpcClient {
   }
 
   private handleDisconnect(): void {
-    this.rejectAllControlWaiters(new Error('IPC disconnected'))
+    this.rejectAllWaiters(new Error('IPC disconnected'))
     this.buffer = ''
     this.socket = null
     this.notifyConnectionWaiters()
@@ -252,22 +212,16 @@ export class OmniIpcClient {
     })
   }
 
-  private rejectAllControlWaiters(reason: Error): void {
+  private rejectAllWaiters(reason: Error): void {
     const w = this.controlWaiters.splice(0)
-    for (const { reject } of w) {
-      reject(reason)
-    }
-    for (const { reject } of this.pendingCalls.values()) {
-      reject(reason)
-    }
-    this.pendingCalls.clear()
+    for (const { reject } of w) reject(reason)
+    for (const { reject } of this.pendingInvokes.values()) reject(reason)
+    this.pendingInvokes.clear()
   }
 
   private notifyConnectionWaiters(): void {
     const r = this.connectionResolvers.splice(0)
-    for (const fn of r) {
-      fn()
-    }
+    for (const fn of r) fn()
   }
 
   private async waitUntilConnected(): Promise<void> {
@@ -297,10 +251,10 @@ export class OmniIpcClient {
         this.options.onEvent(msg.event)
         continue
       }
-      if (msg.type === 'call_result') {
-        const pending = this.pendingCalls.get(msg.id)
+      if (msg.type === 'invoke_result') {
+        const pending = this.pendingInvokes.get(msg.id)
         if (pending) {
-          this.pendingCalls.delete(msg.id)
+          this.pendingInvokes.delete(msg.id)
           pending.resolve(msg)
         }
         continue

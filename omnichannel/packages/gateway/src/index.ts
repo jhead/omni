@@ -10,11 +10,12 @@ export * from './http-util.ts'
 export * from './ipc.ts'
 export { startGateway, type GatewayIo, type StartGatewayOptions } from './run.ts'
 export type {
-  CallResult,
   CreateGatewayPluginHost,
   GatewayPluginHost,
   GatewayPluginHostContext,
   GatewayPluginHttpContext,
+  InvokeContext,
+  InvokeResult,
 } from './host-plugin.ts'
 export {
   createGatewayDebugLogger,

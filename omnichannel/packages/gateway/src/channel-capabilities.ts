@@ -1,40 +1,30 @@
-import type {
-  CapabilitySet,
-  OmniDispatchAction,
-  OmnichannelPluginId,
-} from '@omnibot/core'
+import type { CapabilityDef, CapabilitySet, OmnichannelPluginId } from '@omnibot/core'
 
-function actionsForPlugin(plugin: string): OmniDispatchAction[] {
-  if (plugin === 'channel-webhook' || plugin === 'channel-alertmanager')
-    return ['noop']
-  if (plugin === 'channel-discord') return ['reply', 'react', 'ack', 'noop']
-  return ['reply', 'react', 'ack', 'resolve', 'noop']
-}
+import type { GatewayPluginHost } from './host-plugin.ts'
 
-function capabilityForChannel(
-  channelId: string,
-  plugin: string,
-  calls: string[] | undefined,
-): CapabilitySet {
-  const ingress = true
-  const egress =
-    plugin !== 'channel-webhook' && plugin !== 'channel-alertmanager'
-  return {
-    channelId,
-    plugin: plugin as OmnichannelPluginId,
-    ingress,
-    egress,
-    actions: actionsForPlugin(plugin),
-    ...(calls ? { calls } : {}),
-  }
-}
-
-/** Builds MCP `omni_context` capability rows from channel plugin ids. */
+/**
+ * Builds MCP `omni_context` capability rows.
+ * Each plugin declares its own capabilities; the gateway just aggregates them.
+ */
 export function getCapabilitySetsForChannels(
   channels: Record<string, { plugin: string }>,
-  callsByPluginId: Map<string, string[]> = new Map(),
+  pluginHosts: Array<{ pluginId: string; host: GatewayPluginHost }>,
 ): CapabilitySet[] {
-  return Object.entries(channels).map(([channelId, ch]) =>
-    capabilityForChannel(channelId, ch.plugin, callsByPluginId.get(ch.plugin)),
-  )
+  // Build a map from plugin id → capabilities
+  const capsByPluginId = new Map<string, Record<string, CapabilityDef>>()
+  for (const { pluginId, host } of pluginHosts) {
+    capsByPluginId.set(pluginId, host.capabilities)
+  }
+
+  return Object.entries(channels).map(([channelId, ch]) => {
+    const capabilities = capsByPluginId.get(ch.plugin) ?? {}
+    const egress = Object.values(capabilities).some(c => !c.requiresReplyHandle || c.requiresReplyHandle)
+    return {
+      channelId,
+      plugin: ch.plugin as OmnichannelPluginId,
+      ingress: true,
+      egress: Object.keys(capabilities).length > 0,
+      capabilities,
+    }
+  })
 }

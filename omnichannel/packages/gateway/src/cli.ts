@@ -6,8 +6,6 @@
  * Config path is the first non-flag argument, or `OMNI_CONFIG` / default `omni.yaml`.
  */
 
-import { validateOmniDispatch } from '@omnibot/core'
-
 import { getCapabilitySetsForChannels } from './channel-capabilities.ts'
 import {
   createGatewayDebugLogger,
@@ -72,9 +70,7 @@ async function importChannelModules(
       try {
         const mod = (await import(specifier)) as Record<string, unknown>
         map.set(id, mod)
-        log.log('plugin', `loaded ${specifier}`, {
-          exports: Object.keys(mod).sort(),
-        })
+        log.log('plugin', `loaded ${specifier}`, { exports: Object.keys(mod).sort() })
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         throw new Error(`Failed to load channel package ${specifier}: ${msg}`)
@@ -135,67 +131,49 @@ async function main(): Promise<void> {
     config: cfg,
     debugLog,
     getCapabilities: () => {
-      const callsByPluginId = new Map<string, string[]>()
-      for (let i = 0; i < plugins.length; i++) {
-        const p = plugins[i]
-        const label = pluginLabels[i]
-        if (p?.calls?.length && label) callsByPluginId.set(label, p.calls)
-      }
-      const caps = getCapabilitySetsForChannels(cfg.channels, callsByPluginId)
+      const pluginHosts = plugins.map((host, i) => ({
+        pluginId: pluginLabels[i] ?? '',
+        host,
+      }))
+      const caps = getCapabilitySetsForChannels(cfg.channels, pluginHosts)
       debugLog.log('cli', 'getCapabilities()', caps)
       return caps
     },
-    onDispatch: async (d, { db }) => {
-      debugLog.log('dispatch', 'inbound', d)
-      const v = validateOmniDispatch({
-        replyHandle: d.replyHandle,
-        action: d.action,
-        args: d.args,
-      })
-      if (!v.ok) {
-        debugLog.log('dispatch', 'validation failed', v.errors)
-        return { ok: false, error: v.errors.join('; ') }
+    onInvoke: async (d, { db }) => {
+      debugLog.log('invoke', 'inbound', d)
+
+      let channelId = d.channelId
+      let route: Record<string, unknown> | undefined
+
+      // If a replyHandle was provided, resolve it to a channelId + route
+      if (d.replyHandle) {
+        const row = getReplyHandleRow(db, d.replyHandle)
+        if (!row) {
+          debugLog.log('invoke', 'unknown replyHandle', { replyHandle: d.replyHandle })
+          return { ok: false, error: 'unknown or expired reply handle' }
+        }
+        channelId = row.omni_channel_id
+        try {
+          route = JSON.parse(row.route_json) as Record<string, unknown>
+        } catch {
+          debugLog.log('invoke', 'invalid route_json', { raw: row.route_json })
+          return { ok: false, error: 'invalid route data' }
+        }
+        debugLog.log('invoke', 'resolved replyHandle', { channelId, route })
       }
-      const row = getReplyHandleRow(db, v.value.replyHandle)
-      if (!row) {
-        debugLog.log('dispatch', 'no reply_handle row', {
-          replyHandle: v.value.replyHandle,
-        })
-        return { ok: false, error: 'unknown or expired reply handle' }
-      }
-      let route: { kind?: string }
-      try {
-        route = JSON.parse(row.route_json) as { kind?: string }
-      } catch {
-        debugLog.log('dispatch', 'invalid route_json', { raw: row.route_json })
-        return { ok: false, error: 'invalid route data' }
-      }
-      debugLog.log('dispatch', 'route', route)
+
       for (let i = 0; i < plugins.length; i++) {
         const p = plugins[i]
         if (!p) break
         const label = pluginLabels[i] ?? `plugin[${i}]`
-        debugLog.log('dispatch', `tryDispatchRoute(${label})`)
-        const r = await p.tryDispatchRoute(route, v.value.action, v.value.args)
-        debugLog.log('dispatch', `tryDispatchRoute(${label}) result`, r ?? null)
+        debugLog.log('invoke', `invoke(${label})`)
+        const r = await p.invoke({ channelId, capability: d.capability, args: d.args, route })
+        debugLog.log('invoke', `invoke(${label}) result`, r ?? null)
         if (r != null) return r
       }
-      debugLog.log('dispatch', 'no plugin handled route')
-      return { ok: false, error: 'no egress for this route' }
-    },
-    onCall: async (d, _io) => {
-      debugLog.log('call', 'inbound', d)
-      for (let i = 0; i < plugins.length; i++) {
-        const p = plugins[i]
-        if (!p?.tryCall) continue
-        const label = pluginLabels[i] ?? `plugin[${i}]`
-        debugLog.log('call', `tryCall(${label})`)
-        const r = await p.tryCall(d.channelId, d.method, d.args)
-        debugLog.log('call', `tryCall(${label}) result`, r ?? null)
-        if (r != null) return r
-      }
-      debugLog.log('call', 'no plugin handled call')
-      return { ok: false, error: 'no handler for this channel/method' }
+
+      debugLog.log('invoke', 'no plugin handled invoke')
+      return { ok: false, error: 'no handler for this channel/capability' }
     },
     fetch: (req, io) =>
       dispatchPluginHttp(req, io, plugins, pluginLabels, httpCtx, debugLog),
@@ -235,10 +213,7 @@ function dispatchPluginHttp(
       }
       debugLog.log('http', `handleHttp(${label})`)
       const r = await handler(req, io, httpCtx)
-      debugLog.log('http', `handleHttp(${label}) result`, {
-        handled: r != null,
-        status: r?.status,
-      })
+      debugLog.log('http', `handleHttp(${label}) result`, { handled: r != null, status: r?.status })
       if (r != null) return r
     }
     debugLog.log('http', 'no plugin handled request', { url: req.url })

@@ -4,11 +4,13 @@
 
 import type { Database } from 'bun:sqlite'
 
+import type { CapabilityDef } from '@omnibot/core'
 import type {
-  DispatchResult,
   GatewayIo,
   GatewayPluginHost,
   GatewayPluginHostContext,
+  InvokeContext,
+  InvokeResult,
   IpcHub,
 } from '@omnibot/gateway'
 import {
@@ -38,6 +40,56 @@ export interface DiscordHostModule {
   executeDiscordCall: typeof executeDiscordCall
 }
 
+const DISCORD_CAPABILITIES: Record<string, CapabilityDef> = {
+  reply: {
+    description: 'Reply to a specific message',
+    requiresReplyHandle: true,
+    args: {
+      text: { type: 'string', required: true },
+    },
+  },
+  react: {
+    description: 'Add an emoji reaction to a specific message',
+    requiresReplyHandle: true,
+    args: {
+      emoji: { type: 'string', required: true },
+    },
+  },
+  ack: {
+    description: 'Acknowledge a message without replying',
+    requiresReplyHandle: true,
+    args: {},
+  },
+  noop: {
+    description: 'No-op',
+    requiresReplyHandle: true,
+    args: {},
+  },
+  send_message: {
+    description: 'Send a message to a channel without replying to a specific message',
+    requiresReplyHandle: false,
+    args: {
+      text: { type: 'string', required: true },
+      channelId: { type: 'string', required: false, description: 'Discord channel/thread ID; defaults to configured channel' },
+    },
+  },
+  fetch_history: {
+    description: 'Fetch recent messages from a channel or thread',
+    requiresReplyHandle: false,
+    args: {
+      limit: { type: 'number', required: false, description: 'Number of messages to fetch (1–100, default 20)' },
+      threadId: { type: 'string', required: false, description: 'Thread ID to fetch from; defaults to the configured channel' },
+    },
+  },
+  download_attachment: {
+    description: 'Download an attachment URL to a temp file',
+    requiresReplyHandle: false,
+    args: {
+      url: { type: 'string', required: true, description: 'Attachment URL from the event payload' },
+    },
+  },
+}
+
 export function parseDiscordSubscriptions(
   channels: Record<string, { plugin: string; discordChannelId?: unknown }>,
 ): Array<{ omniChannelId: string; discordChannelId: string }> {
@@ -65,18 +117,13 @@ function tokenSourceFromDocument(
 
 function wrapDiscordStore(db: Database): DiscordIngressStore {
   return {
-    insertReplyHandle(
-      id: string,
-      omniChannelId: string,
-      routeJson: string,
-      expiresAt: number,
-    ): void {
+    insertReplyHandle(id, omniChannelId, routeJson, expiresAt): void {
       insertReplyHandle(db, id, omniChannelId, routeJson, expiresAt)
     },
     insertQueuedEvent(event, expiresAt): void {
       dbInsertQueuedEvent(db, event, expiresAt)
     },
-    deleteQueuedEvent(id: string): void {
+    deleteQueuedEvent(id): void {
       dbDeleteQueuedEvent(db, id)
     },
   }
@@ -101,8 +148,7 @@ export function createGatewayPluginHost(
   const dlog = options.debugLog
   const subscriptions = parseDiscordSubscriptions(options.channels)
   const omniChannelIds = new Set(subscriptions.map(s => s.omniChannelId))
-  const tokenSrc = () =>
-    tokenSourceFromDocument(options.channels, options.document)
+  const tokenSrc = () => tokenSourceFromDocument(options.channels, options.document)
   const { replyHandleTtlMs } = options
 
   let runtime: DiscordRuntime | null = null
@@ -142,73 +188,54 @@ export function createGatewayPluginHost(
       replyHandleTtlMs,
       debugLog: dlog,
     })
-    dlog?.log('discord', 'afterHubReady: bot running', {
-      userId: runtime.client.user?.id,
-    })
+    dlog?.log('discord', 'afterHubReady: bot running', { userId: runtime.client.user?.id })
   }
 
-  const tryDispatchRoute = async (
-    route: { kind?: string },
-    action: string,
-    args: Record<string, unknown>,
-  ): Promise<DispatchResult | null> => {
-    if (route.kind !== 'discord') return null
+  const invoke = async (ctx: InvokeContext): Promise<InvokeResult | null> => {
+    if (!omniChannelIds.has(ctx.channelId)) return null
+
     const client = runtime?.client
     if (!client) {
-      dlog?.log('discord', 'tryDispatchRoute: client not running')
+      dlog?.log('discord', 'invoke: client not running')
       return { ok: false, error: 'discord client not running' }
     }
-    dlog?.log('discord', 'tryDispatchRoute', {
-      route,
-      action,
-      args,
-    })
-    try {
-      const detail = await mod.executeDiscordDispatch(
-        client,
-        route as DiscordRouteData,
-        action,
-        args,
-        dlog,
-      )
-      dlog?.log('discord', 'tryDispatchRoute ok', { detail })
-      return { ok: true, detail }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      dlog?.log('discord', 'tryDispatchRoute error', { error: msg })
-      return { ok: false, error: msg }
-    }
-  }
 
-  const tryCall = async (
-    channelId: string,
-    method: string,
-    args: Record<string, unknown>,
-  ) => {
-    if (!omniChannelIds.has(channelId)) return null
-    const client = runtime?.client
-    if (!client) {
-      dlog?.log('discord', 'tryCall: client not running')
-      return { ok: false as const, error: 'discord client not running' }
+    dlog?.log('discord', 'invoke', { channelId: ctx.channelId, capability: ctx.capability })
+
+    // Route-scoped capabilities: need ctx.route (from replyHandle)
+    const routeScoped = ['reply', 'react', 'ack', 'noop']
+    if (routeScoped.includes(ctx.capability)) {
+      if (!ctx.route || ctx.route.kind !== 'discord') {
+        return { ok: false, error: `${ctx.capability} requires a valid discord replyHandle` }
+      }
+      try {
+        const detail = await mod.executeDiscordDispatch(
+          client,
+          ctx.route as unknown as DiscordRouteData,
+          ctx.capability,
+          ctx.args,
+          dlog,
+        )
+        return { ok: true, data: detail }
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) }
+      }
     }
-    // Resolve the Discord channel ID from the omni channel ID
-    const sub = subscriptions.find(s => s.omniChannelId === channelId)
+
+    // Channel-scoped capabilities: use configured Discord channel ID
+    const sub = subscriptions.find(s => s.omniChannelId === ctx.channelId)
     if (!sub) return null
-    dlog?.log('discord', 'tryCall', { channelId, discordChannelId: sub.discordChannelId, method, args })
     try {
-      return await mod.executeDiscordCall(client, sub.discordChannelId, method, args)
+      return await mod.executeDiscordCall(client, sub.discordChannelId, ctx.capability, ctx.args)
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      dlog?.log('discord', 'tryCall error', { error: msg })
-      return { ok: false as const, error: msg }
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
     }
   }
 
   return {
-    calls: ['fetch_history', 'download_attachment'],
+    capabilities: DISCORD_CAPABILITIES,
     prepare,
     afterHubReady,
-    tryDispatchRoute,
-    tryCall,
+    invoke,
   }
 }

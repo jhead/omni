@@ -3,14 +3,17 @@ import { join } from 'node:path'
 
 import type { Client } from 'discord.js'
 
-import type { CallResult } from '@omnibot/gateway'
+import type { InvokeResult } from '@omnibot/gateway'
 
 export async function executeDiscordCall(
   client: Client,
   channelId: string,
   method: string,
   args: Record<string, unknown>,
-): Promise<CallResult> {
+): Promise<InvokeResult> {
+  if (method === 'send_message') {
+    return sendMessage(client, channelId, args)
+  }
   if (method === 'fetch_history') {
     return fetchHistory(client, channelId, args)
   }
@@ -20,11 +23,29 @@ export async function executeDiscordCall(
   return { ok: false, error: `unknown method: ${method}` }
 }
 
+async function sendMessage(
+  client: Client,
+  defaultChannelId: string,
+  args: Record<string, unknown>,
+): Promise<InvokeResult> {
+  const text = args.text
+  if (typeof text !== 'string' || !text.trim()) {
+    return { ok: false, error: 'send_message requires args.text' }
+  }
+  const targetId = typeof args.channelId === 'string' ? args.channelId : defaultChannelId
+  const ch = await client.channels.fetch(targetId).catch(() => null)
+  if (!ch?.isTextBased()) {
+    return { ok: false, error: `channel ${targetId} not found or not text-based` }
+  }
+  const sent = await ch.send(text)
+  return { ok: true, data: { messageId: sent.id } }
+}
+
 async function fetchHistory(
   client: Client,
   channelId: string,
   args: Record<string, unknown>,
-): Promise<CallResult> {
+): Promise<InvokeResult> {
   const limit = typeof args.limit === 'number'
     ? Math.min(Math.max(1, args.limit), 100)
     : 20
@@ -64,7 +85,7 @@ async function fetchHistory(
 async function downloadAttachment(
   _client: Client,
   args: Record<string, unknown>,
-): Promise<CallResult> {
+): Promise<InvokeResult> {
   const url = args.url
   if (typeof url !== 'string' || !url.trim()) {
     return { ok: false, error: 'download_attachment requires args.url' }

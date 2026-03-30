@@ -10,15 +10,16 @@ import {
 
 import { handleWebhookPost } from './webhook-ingress.ts'
 
-/** Ingress-only channel: no egress via `omni_dispatch` from stored routes. */
+/** Ingress-only channel: no egress capabilities. */
 export function createGatewayPluginHost(
   _moduleExports: Record<string, unknown>,
   _ctx: GatewayPluginHostContext,
 ): GatewayPluginHost {
   return {
+    capabilities: {},
     prepare() {},
     async afterHubReady() {},
-    async tryDispatchRoute() {
+    async invoke() {
       return null
     },
     async handleHttp(req: Request, io: GatewayIo, httpCtx: GatewayPluginHttpContext) {

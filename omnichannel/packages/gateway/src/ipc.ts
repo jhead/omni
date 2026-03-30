@@ -6,39 +6,28 @@ import type { CapabilitySet, OmnichannelEvent } from '@omnibot/core'
 
 import type { GatewayDebugLogger } from './debug-log.ts'
 
-export type IpcDispatchInbound = {
-  replyHandle: string
-  action: string
-  args: Record<string, unknown>
-}
-
-export type IpcCallInbound = {
+export type IpcInvokeInbound = {
   id: string
   channelId: string
-  method: string
+  capability: string
   args: Record<string, unknown>
+  replyHandle?: string
 }
 
 export type IpcInbound =
   | { type: 'hello'; token?: string; version?: number }
   | { type: 'get_context' }
-  | { type: 'dispatch'; replyHandle: string; action: string; args: Record<string, unknown> }
-  | { type: 'call'; id: string; channelId: string; method: string; args: Record<string, unknown> }
+  | { type: 'invoke'; id: string; channelId: string; capability: string; args: Record<string, unknown>; replyHandle?: string }
 
 export type IpcOutbound =
   | { type: 'hello_ack' }
   | { type: 'error'; message: string }
   | { type: 'context'; channels: CapabilitySet[] }
   | { type: 'event'; event: OmnichannelEvent }
-  | { type: 'dispatch_ack'; ok: boolean; detail?: string; error?: string }
-  | { type: 'call_result'; id: string; ok: boolean; data?: unknown; error?: string }
+  | { type: 'invoke_result'; id: string; ok: boolean; data?: unknown; error?: string }
 
-export type DispatchResult =
-  | { ok: true; detail?: string }
-  | { ok: false; error: string }
-
-export type CallResult =
-  | { ok: true; data: unknown }
+export type InvokeResult =
+  | { ok: true; data?: unknown }
   | { ok: false; error: string }
 
 export interface IpcHubOptions {
@@ -46,8 +35,7 @@ export interface IpcHubOptions {
   sharedSecret?: string | null
   getCapabilities: () => CapabilitySet[]
   onClientReady?: () => void
-  onDispatch?: (input: IpcDispatchInbound) => Promise<DispatchResult>
-  onCall?: (input: IpcCallInbound) => Promise<CallResult>
+  onInvoke?: (input: IpcInvokeInbound) => Promise<InvokeResult>
   debugLog?: GatewayDebugLogger
 }
 
@@ -151,13 +139,8 @@ export class IpcHub {
     try {
       msg = JSON.parse(line) as IpcInbound
     } catch {
-      this.options.debugLog?.log('ipc', 'invalid JSON line', {
-        preview: line.slice(0, 200),
-      })
-      this.send(socket, {
-        type: 'error',
-        message: 'invalid JSON',
-      })
+      this.options.debugLog?.log('ipc', 'invalid JSON line', { preview: line.slice(0, 200) })
+      this.send(socket, { type: 'error', message: 'invalid JSON' })
       return
     }
 
@@ -179,102 +162,48 @@ export class IpcHub {
       }
       this.sockets.add(socket)
       this.send(socket, { type: 'hello_ack' })
-      this.options.debugLog?.log('ipc', 'hello accepted', {
-        clients: this.sockets.size,
-      })
+      this.options.debugLog?.log('ipc', 'hello accepted', { clients: this.sockets.size })
       this.options.onClientReady?.()
       return
     }
 
     if (m.type === 'get_context') {
       if (!this.sockets.has(socket)) {
-        this.send(socket, {
-          type: 'error',
-          message: 'send hello before get_context',
-        })
+        this.send(socket, { type: 'error', message: 'send hello before get_context' })
         return
       }
       const caps = this.options.getCapabilities()
-      this.options.debugLog?.log('ipc', 'get_context reply', {
-        channelSets: caps.length,
-      })
-      this.send(socket, {
-        type: 'context',
-        channels: caps,
-      })
+      this.options.debugLog?.log('ipc', 'get_context reply', { channelSets: caps.length })
+      this.send(socket, { type: 'context', channels: caps })
       return
     }
 
-    if (m.type === 'dispatch') {
+    if (m.type === 'invoke') {
       if (!this.sockets.has(socket)) {
-        this.send(socket, {
-          type: 'error',
-          message: 'send hello before dispatch',
-        })
+        this.send(socket, { type: 'error', message: 'send hello before invoke' })
         return
       }
-      const replyHandle = m.replyHandle
-      const action = m.action
-      const args = m.args
-      if (
-        typeof replyHandle !== 'string' ||
-        typeof action !== 'string' ||
-        !args ||
-        typeof args !== 'object'
-      ) {
-        this.send(socket, {
-          type: 'dispatch_ack',
-          ok: false,
-          error: 'invalid dispatch payload',
-        })
-        return
-      }
-      const onDispatch = this.options.onDispatch
-      if (!onDispatch) {
-        this.send(socket, {
-          type: 'dispatch_ack',
-          ok: false,
-          error: 'dispatch not enabled',
-        })
-        return
-      }
-      void onDispatch({ replyHandle, action, args }).then(r => {
-        this.options.debugLog?.log('ipc', 'dispatch result', r)
-        if (r.ok) {
-          this.send(socket, { type: 'dispatch_ack', ok: true, detail: r.detail })
-        } else {
-          this.send(socket, { type: 'dispatch_ack', ok: false, error: r.error })
-        }
-      })
-      return
-    }
-
-    if (m.type === 'call') {
-      if (!this.sockets.has(socket)) {
-        this.send(socket, { type: 'error', message: 'send hello before call' })
-        return
-      }
-      const { id, channelId, method, args } = m
+      const { id, channelId, capability, args, replyHandle } = m
       if (
         typeof id !== 'string' ||
         typeof channelId !== 'string' ||
-        typeof method !== 'string' ||
+        typeof capability !== 'string' ||
         !args || typeof args !== 'object'
       ) {
-        this.send(socket, { type: 'call_result', id: String(id ?? ''), ok: false, error: 'invalid call payload' })
+        this.send(socket, { type: 'invoke_result', id: String(id ?? ''), ok: false, error: 'invalid invoke payload' })
         return
       }
-      const onCall = this.options.onCall
-      if (!onCall) {
-        this.send(socket, { type: 'call_result', id, ok: false, error: 'call not enabled' })
+      const onInvoke = this.options.onInvoke
+      if (!onInvoke) {
+        this.send(socket, { type: 'invoke_result', id, ok: false, error: 'invoke not enabled' })
         return
       }
-      void onCall({ id, channelId, method, args }).then(r => {
-        this.options.debugLog?.log('ipc', 'call result', { id, ok: r.ok })
+      void onInvoke({ id, channelId, capability, args, replyHandle }).then(r => {
+        this.options.debugLog?.log('ipc', 'invoke result', { id, ok: r.ok })
         if (r.ok) {
-          this.send(socket, { type: 'call_result', id, ok: true, data: r.data })
+          this.send(socket, { type: 'invoke_result', id, ok: true, data: r.data })
         } else {
-          this.send(socket, { type: 'call_result', id, ok: false, error: r.error })
+          this.send(socket, { type: 'invoke_result', id, ok: false, error: r.error })
         }
       })
       return
@@ -308,14 +237,10 @@ export class IpcHub {
 
 function loggableInbound(m: IpcInbound): Record<string, unknown> {
   if (m.type === 'hello') {
-    return {
-      type: m.type,
-      version: m.version,
-      token: m.token ? '(redacted)' : undefined,
-    }
+    return { type: m.type, version: m.version, token: m.token ? '(redacted)' : undefined }
   }
-  if (m.type === 'dispatch') {
-    return { type: m.type, replyHandle: m.replyHandle, action: m.action, args: m.args }
+  if (m.type === 'invoke') {
+    return { type: m.type, id: m.id, channelId: m.channelId, capability: m.capability, hasReplyHandle: !!m.replyHandle }
   }
   return { type: m.type }
 }
@@ -325,17 +250,8 @@ export function createIpcHub(opts: {
   sharedSecret?: string | null
   getCapabilities: () => CapabilitySet[]
   onClientReady?: () => void
-  onDispatch?: (input: IpcDispatchInbound) => Promise<DispatchResult>
-  onCall?: (input: IpcCallInbound) => Promise<CallResult>
+  onInvoke?: (input: IpcInvokeInbound) => Promise<InvokeResult>
   debugLog?: GatewayDebugLogger
 }): IpcHub {
-  return new IpcHub({
-    socketPath: opts.socketPath,
-    sharedSecret: opts.sharedSecret,
-    getCapabilities: opts.getCapabilities,
-    onClientReady: opts.onClientReady,
-    onDispatch: opts.onDispatch,
-    onCall: opts.onCall,
-    debugLog: opts.debugLog,
-  })
+  return new IpcHub(opts)
 }
