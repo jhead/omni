@@ -12,6 +12,8 @@ import {
   summarizeConfigForDebug,
   type GatewayDebugLogger,
 } from './debug-log.ts'
+import { createOmniMcpHttpFetchHandler } from '@omnibot/mcp-server/http'
+
 import {
   getReplyHandleRow,
   jsonResponse,
@@ -127,6 +129,9 @@ async function main(): Promise<void> {
 
   const httpCtx: GatewayPluginHttpContext = { ttlMs, config: cfg }
 
+  let mcpHttpFetch: ((req: Request) => Promise<Response>) | undefined
+  const mcpPath = cfg.gateway.mcpHttpPath
+
   await startGateway({
     config: cfg,
     debugLog,
@@ -175,8 +180,18 @@ async function main(): Promise<void> {
       debugLog.log('invoke', 'no plugin handled invoke')
       return { ok: false, error: 'no handler for this channel/capability' }
     },
-    fetch: (req, io) =>
-      dispatchPluginHttp(req, io, plugins, pluginLabels, httpCtx, debugLog),
+    fetch: (req, io) => {
+      if (mcpPath !== false) {
+        const url = new URL(req.url)
+        if (url.pathname === mcpPath) {
+          if (!mcpHttpFetch) {
+            mcpHttpFetch = createOmniMcpHttpFetchHandler({ mcpPath, hub: io.hub })
+          }
+          return mcpHttpFetch(req)
+        }
+      }
+      return dispatchPluginHttp(req, io, plugins, pluginLabels, httpCtx, debugLog)
+    },
     afterHubReady: async io => {
       for (let i = 0; i < plugins.length; i++) {
         const p = plugins[i]

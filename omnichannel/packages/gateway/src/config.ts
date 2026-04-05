@@ -15,6 +15,7 @@ export interface GatewaySection {
   sharedSecret?: string | null
   queueTtlSeconds?: number
   replyHandleTtlSeconds?: number
+  mcpHttpPath?: string | false
 }
 
 /** Each channel row must include `plugin`; other keys are opaque to the gateway. */
@@ -55,6 +56,18 @@ export function parseGatewayDocument(root: unknown): Omit<
     throw new Error('omni config: gateway.dbPath must be a string')
   }
 
+  let mcpHttpPath: string | false
+  if (gw.mcpHttpPath === false) {
+    mcpHttpPath = false
+  } else if (typeof gw.mcpHttpPath === 'string' && gw.mcpHttpPath.trim()) {
+    const p = gw.mcpHttpPath.trim()
+    mcpHttpPath = p.startsWith('/') ? p : `/${p}`
+  } else if (gw.mcpHttpPath === undefined || gw.mcpHttpPath === null) {
+    mcpHttpPath = '/mcp'
+  } else {
+    throw new Error('omni config: gateway.mcpHttpPath must be false, omitted, or a non-empty string')
+  }
+
   const gateway: GatewaySection = {
     httpHostname:
       typeof gw.httpHostname === 'string' ? gw.httpHostname : undefined,
@@ -75,6 +88,7 @@ export function parseGatewayDocument(root: unknown): Omit<
       typeof gw.replyHandleTtlSeconds === 'number'
         ? gw.replyHandleTtlSeconds
         : undefined,
+    mcpHttpPath,
   }
 
   const ch = root.channels

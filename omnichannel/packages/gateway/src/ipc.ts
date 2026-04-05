@@ -42,9 +42,32 @@ export interface IpcHubOptions {
 export class IpcHub {
   private readonly sockets = new Set<Socket>()
   private readonly buffers = new WeakMap<Socket, string>()
+  private readonly eventSubscribers = new Set<(event: OmnichannelEvent) => void>()
   private server: ReturnType<typeof createServer> | null = null
 
   constructor(private readonly options: IpcHubOptions) {}
+
+  /**
+   * In-process listeners (HTTP MCP, etc.) — same events as IPC `type: event` lines.
+   */
+  subscribeEvents(listener: (event: OmnichannelEvent) => void): () => void {
+    this.eventSubscribers.add(listener)
+    return () => {
+      this.eventSubscribers.delete(listener)
+    }
+  }
+
+  getCapabilitiesSnapshot(): CapabilitySet[] {
+    return this.options.getCapabilities()
+  }
+
+  invokeInProcess(input: IpcInvokeInbound): Promise<InvokeResult> {
+    const onInvoke = this.options.onInvoke
+    if (!onInvoke) {
+      return Promise.resolve({ ok: false, error: 'invoke not enabled' })
+    }
+    return onInvoke(input)
+  }
 
   get clientCount(): number {
     return this.sockets.size
@@ -96,6 +119,17 @@ export class IpcHub {
       })
     } else if (log?.enabled) {
       log.log('ipc', 'broadcast', msg)
+    }
+    if (msg.type === 'event') {
+      for (const fn of this.eventSubscribers) {
+        try {
+          fn(msg.event)
+        } catch (e) {
+          const msgText = e instanceof Error ? e.message : String(e)
+          this.options.debugLog?.log('ipc', 'event subscriber threw', { message: msgText })
+          process.stderr.write(`omnichannel gateway: ipc event subscriber error: ${msgText}\n`)
+        }
+      }
     }
     const line = `${JSON.stringify(msg)}\n`
     const dead: Socket[] = []

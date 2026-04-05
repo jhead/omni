@@ -3,7 +3,10 @@
   "version": "0.0.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./http": "./src/mcp-http.ts",
+    "./core": "./src/omni-mcp-core.ts",
+    "./hub-types": "./src/hub-types.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.0",
