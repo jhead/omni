@@ -1,0 +1,24 @@
+{
+  "name": "@omnibot/omniview",
+  "version": "0.0.0",
+  "type": "module",
+  "bin": {
+    "omniview": "./src/index.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "start": "bun src/index.tsx",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@omnibot/omnimux": "file:../omnimux",
+    "@xterm/headless": "^5.5.0",
+    "ink": "^6.6.0",
+    "react": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^19.2.0",
+    "typescript": "^5.7.0"
+  }
+}
