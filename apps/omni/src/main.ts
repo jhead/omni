@@ -47,11 +47,15 @@ async function main(): Promise<void> {
     rows: cfg.agents.defaultRows,
   })
 
+  const agentsDbAbs = resolve(dirname(cfg.configPath), cfg.agents.persistenceDbPath)
+  ensureParentDir(agentsDbAbs)
+
   const agentManager = new AgentManager(
     cfg.agents,
     mux,
     gatewayMcpHttpUrl(cfg),
     anthropicProxyUrl,
+    agentsDbAbs,
   )
 
   const server = startOmniServer({
@@ -79,7 +83,7 @@ async function main(): Promise<void> {
 
   const shutdown = (): void => {
     console.error('[omni-app] shutting down…')
-    agentManager.killAll()
+    agentManager.shutdownPersistAndClear()
     server.stop()
     omnirouterHandle?.stop()
     process.exit(0)

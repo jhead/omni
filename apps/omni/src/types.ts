@@ -27,6 +27,11 @@ export interface AgentsConfig {
   defaultCols: number
   defaultRows: number
   /**
+   * SQLite registry for agent metadata (survives restarts; PTYs are still recreated via Restart).
+   * Resolved relative to the directory containing `omni.config.yaml`.
+   */
+  persistenceDbPath: string
+  /**
    * Base URL for `ANTHROPIC_BASE_URL` when `omnirouter.enabled` is false (external router).
    * When omnirouter is enabled, the app derives the URL from `omnirouter.listen` and ignores this.
    */

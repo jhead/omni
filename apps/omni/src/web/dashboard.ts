@@ -27,7 +27,7 @@ async function api(path: string, init?: RequestInit): Promise<Response> {
   return fetch(path, { ...init, headers })
 }
 
-type AgentRow = { id: string; status: string }
+type AgentRow = { id: string; status: string; exitCode?: number | null }
 
 let attached: AttachedTerminal[] = []
 
@@ -60,13 +60,31 @@ function renderTiles(agents: AgentRow[]): void {
     const head = document.createElement('div')
     head.className = 'tile-head'
     const title = document.createElement('div')
-    title.innerHTML = `<code>${escapeHtml(a.id)}</code><div class="meta">${escapeHtml(a.status)}</div>`
+    const exitBit =
+      a.status === 'exited' && a.exitCode != null ?
+        ` exit=${escapeHtml(String(a.exitCode))}`
+      : ''
+    title.innerHTML = `<code>${escapeHtml(a.id)}</code><div class="meta">${escapeHtml(a.status)}${exitBit}</div>`
+    const actions = document.createElement('div')
+    actions.className = 'tile-actions'
     const solo = document.createElement('a')
     solo.href = `/terminal?id=${encodeURIComponent(a.id)}`
     solo.textContent = 'Open solo'
     solo.title = 'Full-page terminal for this agent'
+    actions.appendChild(solo)
+    if (a.status === 'exited') {
+      const restartBtn = document.createElement('button')
+      restartBtn.type = 'button'
+      restartBtn.className = 'tile-btn'
+      restartBtn.textContent = 'Restart'
+      restartBtn.title = 'Spawn a new session for this agent (same id, same config dir)'
+      restartBtn.addEventListener('click', () => {
+        void restartAgent(a.id)
+      })
+      actions.appendChild(restartBtn)
+    }
     head.appendChild(title)
-    head.appendChild(solo)
+    head.appendChild(actions)
 
     const host = document.createElement('div')
     host.className = 'term-host'
@@ -78,7 +96,7 @@ function renderTiles(agents: AgentRow[]): void {
       attached.push(attachTerminal(a.id, host))
     } else {
       host.className = 'term-host term-host--inactive'
-      host.textContent = 'Session ended — spawn a new agent or refresh after restart.'
+      host.textContent = 'Session ended — use Restart or spawn a new agent.'
       tile.appendChild(head)
       tile.appendChild(host)
       section.appendChild(tile)
@@ -117,6 +135,18 @@ async function spawnAgent(): Promise<void> {
   })
   if (!res.ok) {
     setError(`POST /api/agents: ${res.status} ${await res.text()}`)
+    return
+  }
+  await refreshList()
+}
+
+async function restartAgent(id: string): Promise<void> {
+  setError('')
+  const res = await api(`/api/agents/${encodeURIComponent(id)}/restart`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    setError(`Restart: ${res.status} ${await res.text()}`)
     return
   }
   await refreshList()

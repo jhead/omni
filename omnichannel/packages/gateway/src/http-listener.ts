@@ -15,6 +15,8 @@ export function serveGatewayHttp(
   return Bun.serve({
     hostname: options.hostname,
     port: options.port,
+    /** Default 10s closes quiet SSE/MCP streams; MCP uses long-lived GET + sparse notifications. */
+    idleTimeout: 0,
     fetch: options.fetch,
   })
 }

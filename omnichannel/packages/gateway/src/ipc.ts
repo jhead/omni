@@ -115,7 +115,8 @@ export class IpcHub {
         id: msg.event.id,
         channelId: msg.event.channelId,
         plugin: msg.event.plugin,
-        clients: this.sockets.size,
+        ipcSocketClients: this.sockets.size,
+        inProcessEventSubscribers: this.eventSubscribers.size,
       })
     } else if (log?.enabled) {
       log.log('ipc', 'broadcast', msg)

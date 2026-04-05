@@ -56,11 +56,16 @@ function parseAgents(raw: unknown): AgentsConfig {
     : (() => {
         throw new Error('omni config: agents.templateDir must be a string or null')
       })()
+  const persistenceDbPath =
+    typeof raw.persistenceDbPath === 'string' && raw.persistenceDbPath.trim() ?
+      raw.persistenceDbPath.trim()
+    : './data/omni-agents.sqlite'
   return {
     baseDir,
     defaultCmd,
     defaultCols,
     defaultRows,
+    persistenceDbPath,
     omnirouterUrl,
     templateDir,
   }

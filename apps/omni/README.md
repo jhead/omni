@@ -48,6 +48,7 @@ All `/api/*` routes require:
 | POST | `/api/agents` | Spawn agent (JSON body optional: `id`, `cmd`, `cwd`, `env`, `cols`, `rows`) |
 | GET | `/api/agents/:id` | Agent info |
 | DELETE | `/api/agents/:id` | Kill agent PTY |
+| POST | `/api/agents/:id/restart` | Restart an **exited** agent (same id and config dir; new PTY) |
 | POST | `/api/agents/:id/input` | Raw text to PTY stdin |
 | POST | `/api/agents/:id/resize` | JSON `{ cols, rows }` |
 
