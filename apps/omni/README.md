@@ -4,15 +4,17 @@ Single process that runs the **omnichannel gateway** (webhooks, IPC hub, SQLite 
 
 ## Startup order
 
-1. Start **omnirouter** in a separate terminal (it should listen on the URL in `agents.omnirouterUrl`, default `http://127.0.0.1:3456`). Agents get `ANTHROPIC_BASE_URL` set to this URL.
-2. Ensure `ANTHROPIC_API_KEY` is available in the environment (used by omnirouter / upstream).
-3. From the **repository root** (`omni/`, where `package.json` defines workspaces), install dependencies:
+1. Ensure **`ANTHROPIC_API_KEY`** is in the environment (omnirouter forwards requests to `omnirouter.upstreamBaseUrl`, default `https://api.anthropic.com`).
+2. **Omnirouter** starts inside this process by default (`omnirouter.enabled: true`). It listens on `omnirouter.listen` and proxies to `upstreamBaseUrl`. **Pass-through** mode (`omnirouter.passthrough`, default `true`) forwards client model and tools unchanged; set `passthrough: false` and supply `model` + `toolAllowlist` for filtered mode (see `omnirouter` package).
+3. Agent PTYs get `ANTHROPIC_BASE_URL` set to the in-process router (`http://<listen.host>:<listen.port>`) when enabled, or to **`agents.omnirouterUrl`** when `omnirouter.enabled: false` (external router).
+4. Optional: **`OMNI_UPSTREAM_BASE_URL`** overrides the default upstream API URL when `omnirouter.upstreamBaseUrl` is omitted in YAML.
+5. From the **repository root** (`omni/`, where `package.json` defines workspaces), install dependencies:
 
 ```bash
 bun install
 ```
 
-4. Start the app from `apps/omni`:
+6. Start the app from `apps/omni`:
 
 ```bash
 cd apps/omni
@@ -27,6 +29,7 @@ Optional: `OMNI_DEBUG=1` — verbose gateway logging (same idea as `omnibot-gate
 
 | Port (default) | Role |
 |----------------|------|
+| `omnirouter.listen.port` (3456) | Anthropic HTTP proxy (`POST /v1/messages`) when `omnirouter.enabled` |
 | `gateway.httpPort` (8080) | Gateway HTTP: `/webhooks/...`, plugin ingress |
 | `omniServer.port` (9090) | Control plane: `/api/*` (Bearer), `/`, `/terminal`, WebSocket `/ws/agents/:id` |
 
@@ -59,10 +62,10 @@ WebSocket `/ws/agents/:id` (no auth in this MVP): raw terminal I/O; JSON message
 
 Each agent gets a directory under `agents.baseDir/<agentId>/` with:
 
-- `.mcp.json` — runs `bun run mcp` from the **omnichannel** repo root, with `OMNI_IPC_SOCKET` pointing at the gateway IPC socket.
+- `.mcp.json` — `omni` MCP uses **Streamable HTTP** to the gateway (`type: http`, `url` from `gateway.httpHostname`, `httpPort`, and `mcpHttpPath`, default path `/mcp`).
 - `.claude/settings.local.json` — enables the `omni` MCP server.
 
-`CLAUDE_CONFIG_DIR`, `HOME`, and `ANTHROPIC_BASE_URL` are set for the PTY so Claude uses that tree and routes via omnirouter.
+`CLAUDE_CONFIG_DIR`, `HOME`, and `ANTHROPIC_BASE_URL` are set for the PTY so Claude uses that tree and sends API traffic through omnirouter (in-process or external).
 
 ## Discord or other channels
 

@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import { parseGatewayDocument, type LoadedGatewayConfig } from '@omnibot/gateway'
 import { parse as parseYaml } from 'yaml'
 
-import type { AgentsConfig, OmniConfig, OmniServerConfig } from './types.ts'
+import type { AgentsConfig, OmniConfig, OmniServerConfig, OmnirouterAppConfig } from './types.ts'
 
 function isRecord(x: unknown): x is Record<string, unknown> {
   return x !== null && typeof x === 'object' && !Array.isArray(x)
@@ -46,8 +46,8 @@ function parseAgents(raw: unknown): AgentsConfig {
     typeof raw.defaultRows === 'number' && Number.isFinite(raw.defaultRows) ? raw.defaultRows : 40
   const omnirouterUrl =
     typeof raw.omnirouterUrl === 'string' && raw.omnirouterUrl.trim() ?
-      raw.omnirouterUrl.trim()
-    : 'http://127.0.0.1:3456'
+      raw.omnirouterUrl.trim().replace(/\/$/, '')
+    : null
   const templateDir =
     raw.templateDir === null || raw.templateDir === undefined ?
       null
@@ -63,6 +63,110 @@ function parseAgents(raw: unknown): AgentsConfig {
     defaultRows,
     omnirouterUrl,
     templateDir,
+  }
+}
+
+function defaultUpstreamBaseUrl(): string {
+  const fromEnv = process.env.OMNI_UPSTREAM_BASE_URL?.trim()
+  if (fromEnv) {
+    return fromEnv.replace(/\/$/, '')
+  }
+  return 'https://api.anthropic.com'
+}
+
+function parseOmnirouter(raw: unknown): OmnirouterAppConfig {
+  const upstreamDefault = defaultUpstreamBaseUrl()
+  if (raw === undefined || raw === null) {
+    return {
+      enabled: true,
+      listen: { hostname: '127.0.0.1', port: 3456 },
+      upstreamBaseUrl: upstreamDefault,
+      passthrough: true,
+    }
+  }
+  if (!isRecord(raw)) {
+    throw new Error('omni config: omnirouter must be an object')
+  }
+
+  const enabled = raw.enabled === false ? false : true
+
+  let listen: OmnirouterAppConfig['listen'] = { hostname: '127.0.0.1', port: 3456 }
+  if (raw.listen !== undefined) {
+    if (!isRecord(raw.listen)) {
+      throw new Error('omni config: omnirouter.listen must be an object')
+    }
+    const h =
+      typeof raw.listen.hostname === 'string' && raw.listen.hostname.trim() ?
+        raw.listen.hostname.trim()
+      : '127.0.0.1'
+    const p = raw.listen.port
+    if (typeof p !== 'number' || !Number.isFinite(p)) {
+      throw new Error('omni config: omnirouter.listen.port must be a number')
+    }
+    listen = { hostname: h, port: p }
+  }
+
+  const upstreamBaseUrl =
+    typeof raw.upstreamBaseUrl === 'string' && raw.upstreamBaseUrl.trim() ?
+      raw.upstreamBaseUrl.trim().replace(/\/$/, '')
+    : upstreamDefault
+
+  const passthrough = raw.passthrough === false ? false : true
+
+  let model: string | undefined
+  let toolAllowlist: string[] | undefined
+
+  if (!passthrough) {
+    if (typeof raw.model !== 'string' || !raw.model.trim()) {
+      throw new Error(
+        'omni config: omnirouter.model is required when omnirouter.passthrough is false',
+      )
+    }
+    model = raw.model.trim()
+    const tl = raw.toolAllowlist
+    if (
+      !Array.isArray(tl) ||
+      tl.length === 0 ||
+      !tl.every((x): x is string => typeof x === 'string' && x.trim() !== '')
+    ) {
+      throw new Error(
+        'omni config: omnirouter.toolAllowlist must be a non-empty array of strings when passthrough is false',
+      )
+    }
+    toolAllowlist = tl.map(s => s.trim())
+  } else {
+    if (typeof raw.model === 'string' && raw.model.trim()) {
+      model = raw.model.trim()
+    }
+    if (Array.isArray(raw.toolAllowlist)) {
+      const tl = raw.toolAllowlist.filter(
+        (x): x is string => typeof x === 'string' && x.trim() !== '',
+      )
+      if (tl.length > 0) {
+        toolAllowlist = tl.map(s => s.trim())
+      }
+    }
+  }
+
+  let stripAdaptiveThinkingForModels: string[] | undefined
+  if (raw.stripAdaptiveThinkingForModels !== undefined) {
+    const a = raw.stripAdaptiveThinkingForModels
+    if (!Array.isArray(a) || !a.every((x): x is string => typeof x === 'string' && x.trim() !== '')) {
+      throw new Error(
+        'omni config: omnirouter.stripAdaptiveThinkingForModels must be an array of non-empty strings',
+      )
+    }
+    stripAdaptiveThinkingForModels = a.map(s => s.trim())
+  }
+
+  return {
+    enabled,
+    listen,
+    upstreamBaseUrl,
+    passthrough,
+    model,
+    toolAllowlist,
+    stripAdaptiveThinkingForModels,
   }
 }
 
@@ -86,11 +190,19 @@ export function loadOmniAppConfig(path?: string): OmniConfig {
   const base = parseGatewayDocument(doc) as Omit<LoadedGatewayConfig, 'configPath'>
   const omniServer = parseOmniServer(doc.omniServer)
   const agents = parseAgents(doc.agents)
+  const omnirouter = parseOmnirouter(doc.omnirouter)
+
+  if (!omnirouter.enabled && !agents.omnirouterUrl?.trim()) {
+    throw new Error(
+      'omni config: set omnirouter.enabled: true or provide agents.omnirouterUrl for an external router',
+    )
+  }
 
   return {
     configPath,
     ...base,
     omniServer,
     agents,
+    omnirouter,
   }
 }

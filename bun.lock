@@ -8,11 +8,13 @@
     "apps/omni": {
       "name": "@omnibot/omni-app",
       "dependencies": {
-        "@omnibot/channel-agent-bus": "file:../../omnichannel/packages/channels/agent-bus",
-        "@omnibot/channel-webhook": "file:../../omnichannel/packages/channels/webhook",
-        "@omnibot/core": "file:../../omnichannel/packages/core",
-        "@omnibot/gateway": "file:../../omnichannel/packages/gateway",
-        "@omnibot/omnimux": "file:../../omnimux",
+        "@omnibot/channel-agent-bus": "workspace:*",
+        "@omnibot/channel-webhook": "workspace:*",
+        "@omnibot/core": "workspace:*",
+        "@omnibot/gateway": "workspace:*",
+        "@omnibot/mcp-server": "workspace:*",
+        "@omnibot/omnimux": "workspace:*",
+        "@omnibot/omnirouter": "workspace:*",
         "@xterm/addon-attach": "^0.11.0",
         "@xterm/addon-fit": "^0.10.0",
         "@xterm/xterm": "^5.5.0",
@@ -95,6 +97,7 @@
       },
       "dependencies": {
         "@omnibot/core": "workspace:*",
+        "@omnibot/mcp-server": "workspace:*",
         "yaml": "^2.8.0",
       },
     },
@@ -115,6 +118,13 @@
         "bun-pty": "^0.4.8",
         "strip-ansi": "^7.2.0",
       },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.7.0",
+      },
+    },
+    "omnirouter": {
+      "name": "@omnibot/omnirouter",
       "devDependencies": {
         "@types/bun": "latest",
         "typescript": "^5.7.0",
@@ -159,6 +169,8 @@
     "@omnibot/omni-app": ["@omnibot/omni-app@workspace:apps/omni"],
 
     "@omnibot/omnimux": ["@omnibot/omnimux@workspace:omnimux"],
+
+    "@omnibot/omnirouter": ["@omnibot/omnirouter@workspace:omnirouter"],
 
     "@sapphire/async-queue": ["@sapphire/async-queue@1.5.5", "", {}, "sha512-cvGzxbba6sav2zZkH8GPf2oGk9yYoD5qrNWdu9fRehifgnFZJMV+nuy2nON2roRO4yQQ+v7MK/Pktl/HgfsUXg=="],
 
@@ -397,5 +409,7 @@
     "@discordjs/ws/@discordjs/collection": ["@discordjs/collection@2.1.1", "", {}, "sha512-LiSusze9Tc7qF03sLCujF5iZp7K+vRNEDBZ86FT9aQAv3vxMLihUvKvpsCWiQ2DJq1tVckopKm1rxomgNUc9hg=="],
 
     "@omnibot/omnimux/typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
+
+    "@omnibot/omnirouter/typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
   }
 }

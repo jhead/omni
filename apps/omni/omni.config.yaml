@@ -9,13 +9,27 @@ omniServer:
   port: 9090
   bearerToken: "change-me"
 
+# In-process Anthropic proxy (default). Agents use ANTHROPIC_BASE_URL → listen URL.
+# Set upstreamBaseUrl to the real API (override with OMNI_UPSTREAM_BASE_URL).
+omnirouter:
+  enabled: true
+  listen:
+    hostname: "127.0.0.1"
+    port: 3456
+  upstreamBaseUrl: "https://api.anthropic.com"
+  passthrough: true
+  # passthrough: false
+  # model: "claude-haiku-4-5-20251001"
+  # toolAllowlist: ["Read", "Write", "Bash"]
+
 agents:
   baseDir: ./data/agents
-  defaultCmd: ["claude"]
+  defaultCmd: ["claude", "--dangerously-skip-permissions", "--dangerously-load-development-channels", "server:omni"]
   defaultCols: 120
   defaultRows: 40
-  omnirouterUrl: "http://127.0.0.1:3456"
   templateDir: null
+  # Required only when omnirouter.enabled is false (external router):
+  # omnirouterUrl: "http://127.0.0.1:3456"
 
 channels:
   demo:

@@ -28,7 +28,9 @@ export interface AgentInfo {
 export class AgentManager {
   private readonly mux: Omnimux
   private readonly agents: AgentsConfig
-  private readonly ipcSocketPath: string
+  private readonly gatewayMcpHttpUrl: string
+  /** Resolved `ANTHROPIC_BASE_URL` for agent PTYs (in-process or external omnirouter). */
+  private readonly anthropicProxyBaseUrl: string
   private readonly baseDirAbs: string
   private readonly byId = new Map<
     string,
@@ -38,10 +40,16 @@ export class AgentManager {
     }
   >()
 
-  constructor(config: AgentsConfig, mux: Omnimux, ipcSocketPath: string) {
+  constructor(
+    config: AgentsConfig,
+    mux: Omnimux,
+    gatewayMcpHttpUrl: string,
+    anthropicProxyBaseUrl: string,
+  ) {
     this.agents = config
     this.mux = mux
-    this.ipcSocketPath = ipcSocketPath
+    this.gatewayMcpHttpUrl = gatewayMcpHttpUrl
+    this.anthropicProxyBaseUrl = anthropicProxyBaseUrl.replace(/\/$/, '')
     this.baseDirAbs = resolve(config.baseDir)
   }
 
@@ -54,7 +62,7 @@ export class AgentManager {
     const configDir = ensureAgentConfigDir(
       id,
       this.baseDirAbs,
-      this.ipcSocketPath,
+      this.gatewayMcpHttpUrl,
       this.agents.templateDir,
     )
 
@@ -67,7 +75,7 @@ export class AgentManager {
       ...options.env,
       CLAUDE_CONFIG_DIR: resolve(configDir, '.claude'),
       HOME: configDir,
-      ANTHROPIC_BASE_URL: this.agents.omnirouterUrl,
+      ANTHROPIC_BASE_URL: this.anthropicProxyBaseUrl,
     }
 
     const session = this.mux.createSession({

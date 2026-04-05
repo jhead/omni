@@ -1,17 +1,24 @@
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join, resolve } from 'node:path'
 
-const here = dirname(fileURLToPath(import.meta.url))
-const OMNICHANNEL_ROOT = resolve(here, '../../../omnichannel')
+import type { LoadedGatewayConfig } from '@omnibot/gateway'
+
+/** Streamable HTTP MCP URL on the gateway (same host/port/path as `createOmniMcpHttpFetchHandler`). */
+export function gatewayMcpHttpUrl(cfg: LoadedGatewayConfig): string {
+  const host = cfg.gateway.httpHostname?.trim() || '127.0.0.1'
+  const port = cfg.gateway.httpPort
+  const raw = cfg.gateway.mcpHttpPath
+  const path = raw === false || raw === undefined ? '/mcp' : raw
+  return new URL(path, `http://${host}:${port}`).href
+}
 
 /**
- * Ensure per-agent dir exists with MCP config pointing at the gateway IPC socket.
+ * Ensure per-agent dir exists with MCP config: gateway Streamable HTTP (`type` + `url`).
  */
 export function ensureAgentConfigDir(
   agentId: string,
   baseDir: string,
-  ipcSocketPath: string,
+  gatewayMcpHttpUrl: string,
   templateDir?: string | null,
 ): string {
   const dir = resolve(baseDir, agentId)
@@ -20,17 +27,11 @@ export function ensureAgentConfigDir(
   }
   mkdirSync(join(dir, '.claude'), { recursive: true })
 
-  const ipc = resolve(ipcSocketPath)
-
   const mcpJson = {
     mcpServers: {
       omni: {
-        command: 'bun',
-        args: ['run', 'mcp'],
-        cwd: OMNICHANNEL_ROOT,
-        env: {
-          OMNI_IPC_SOCKET: ipc,
-        },
+        type: 'http',
+        url: gatewayMcpHttpUrl,
       },
     },
   }

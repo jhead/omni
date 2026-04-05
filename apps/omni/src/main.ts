@@ -5,10 +5,13 @@ import { dirname, resolve } from 'node:path'
 import { AgentBus, OMNI_AGENT_BUS_KEY } from '@omnibot/channel-agent-bus'
 import { resolveGatewayIpcSocketPath } from '@omnibot/gateway'
 import { createOmnimux } from '@omnibot/omnimux'
+import { createOmnirouter } from '@omnibot/omnirouter'
 
+import { gatewayMcpHttpUrl } from './agent-config.ts'
 import { AgentManager } from './agent-manager.ts'
 import { loadOmniAppConfig } from './config.ts'
 import { startGatewayHost } from './gateway-host.ts'
+import { buildOmnirouterProxyConfig, resolveAnthropicProxyBaseUrl } from './omnirouter-config.ts'
 import { startOmniServer } from './omni-server.ts'
 
 function ensureParentDir(filePath: string): void {
@@ -28,6 +31,12 @@ async function main(): Promise<void> {
 
   ensureParentDir(resolve(cfg.configPath, '..', cfg.gateway.dbPath))
 
+  const omnirouterHandle = cfg.omnirouter.enabled ?
+    createOmnirouter({ config: buildOmnirouterProxyConfig(cfg.omnirouter) })
+  : null
+
+  const anthropicProxyUrl = resolveAnthropicProxyBaseUrl(cfg)
+
   const debug = process.env.OMNI_DEBUG === '1' || process.env.OMNI_DEBUG === 'true'
   await startGatewayHost(cfg, { debug })
 
@@ -38,7 +47,12 @@ async function main(): Promise<void> {
     rows: cfg.agents.defaultRows,
   })
 
-  const agentManager = new AgentManager(cfg.agents, mux, ipcAbs)
+  const agentManager = new AgentManager(
+    cfg.agents,
+    mux,
+    gatewayMcpHttpUrl(cfg),
+    anthropicProxyUrl,
+  )
 
   const server = startOmniServer({
     hostname: cfg.omniServer.hostname,
@@ -49,9 +63,17 @@ async function main(): Promise<void> {
 
   const ctrlUrl = `http://${cfg.omniServer.hostname}:${server.port}`
   const gwUrl = `http://${cfg.gateway.httpHostname ?? '127.0.0.1'}:${cfg.gateway.httpPort}`
+  const mcpHttp =
+    cfg.gateway.mcpHttpPath === false ? '' : ` MCP http ${gwUrl}${cfg.gateway.mcpHttpPath}`
+
+  const routerLine =
+    omnirouterHandle ?
+      `[omni-app] omnirouter ${anthropicProxyUrl} → ${cfg.omnirouter.upstreamBaseUrl} (passthrough=${cfg.omnirouter.passthrough !== false})\n`
+    : `[omni-app] omnirouter external ${anthropicProxyUrl}\n`
 
   console.error(
-    `[omni-app] gateway ${gwUrl} ipc ${ipcAbs}\n` +
+    `${routerLine}` +
+      `[omni-app] gateway ${gwUrl} ipc ${ipcAbs}${mcpHttp}\n` +
       `[omni-app] control plane ${ctrlUrl} (Bearer API + WS /ws/agents/:id)\n`,
   )
 
@@ -59,6 +81,7 @@ async function main(): Promise<void> {
     console.error('[omni-app] shutting down…')
     agentManager.killAll()
     server.stop()
+    omnirouterHandle?.stop()
     process.exit(0)
   }
 
