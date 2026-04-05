@@ -1,6 +1,6 @@
 # @omnibot/omnirouter
 
-HTTP proxy for the Anthropic Messages API (`POST /v1/messages`). It pins a **model**, **tool allowlist**, and optional **adaptive-thinking stripping** for listed model ids, then forwards to a configurable upstream base URL (typically `https://api.anthropic.com`). SSE and JSON responses are optionally normalized so `usage` fields are object-shaped for picky clients.
+HTTP proxy for the Anthropic Messages API (`POST /v1/messages`). By default (**`passthrough`: true**) it forwards client `model` and `tools` unchanged to a configurable upstream base URL (typically `https://api.anthropic.com`). With **`passthrough`: false**, it pins a **model**, **tool allowlist**, and optional **adaptive-thinking stripping** for listed model ids. SSE and JSON responses are optionally normalized so `usage` fields are object-shaped for picky clients.
 
 Requires **[Bun](https://bun.sh)** (uses `Bun.serve`, `Bun.file`).
 
@@ -36,8 +36,9 @@ Top-level shape matches `ProxyConfig`:
 |-------|-------------|
 | `listen` | `{ "hostname": string, "port": number }` |
 | `upstreamBaseUrl` | HTTPS (or HTTP) base for the Anthropic API, e.g. `https://api.anthropic.com` |
-| `model` | Model id applied to every proxied request |
-| `toolAllowlist` | Allowed tool **names**; tools not in the list are removed from the request body |
+| `passthrough` | Optional, default **`true`**: forward client `model` and `tools` unchanged. When **`false`**, `model` and `toolAllowlist` are required and the legacy filtered behavior applies. |
+| `model` | Required when `passthrough` is `false`: model id applied to every proxied request |
+| `toolAllowlist` | Required when `passthrough` is `false`: allowed tool **names**; others are stripped |
 | `logging` | Optional: `incomingRequest`, `outgoingRequest`, `response`, `maxBodyBytes` |
 | `stripAdaptiveThinkingForModels` | Optional: for matching model ids, strip adaptive `thinking` and `output_config.effort` |
 
@@ -56,6 +57,7 @@ import {
 const config: ProxyConfig = {
   listen: { hostname: "127.0.0.1", port: 3456 },
   upstreamBaseUrl: "https://api.anthropic.com",
+  passthrough: false,
   model: "claude-haiku-4-5-20251001",
   toolAllowlist: ["Read", "Write", "Bash"],
 };

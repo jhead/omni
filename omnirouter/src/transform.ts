@@ -5,8 +5,14 @@ export function transformMessagesBody(
   body: MessagesBody,
   cfg: ProxyConfig,
 ): MessagesBody {
-  const model = cfg.model;
-  const allow = new Set(cfg.toolAllowlist);
+  const passthrough = cfg.passthrough !== false;
+
+  if (passthrough) {
+    return { ...body };
+  }
+
+  const model = cfg.model ?? "";
+  const allow = new Set(cfg.toolAllowlist ?? []);
 
   const next: MessagesBody = { ...body, model };
 

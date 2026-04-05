@@ -46,13 +46,15 @@ export function createOmnirouter(
   function logBind(): void {
     const base = config.upstreamBaseUrl.replace(/\/$/, "");
     const log = resolveLogging(config.logging);
+    const mode =
+      config.passthrough !== false ? "passthrough" : `model=${config.model}`;
     if (log.incomingRequest || log.outgoingRequest || log.response) {
       emitLog(
-        `${LOG_PREFIX} bind ${config.listen.hostname}:${config.listen.port} → ${base} (model=${config.model})`,
+        `${LOG_PREFIX} bind ${config.listen.hostname}:${config.listen.port} → ${base} (${mode})`,
       );
     } else {
       emitLog(
-        `${LOG_PREFIX} listening ${config.listen.hostname}:${config.listen.port} → ${base} (model=${config.model})`,
+        `${LOG_PREFIX} listening ${config.listen.hostname}:${config.listen.port} → ${base} (${mode})`,
       );
     }
   }

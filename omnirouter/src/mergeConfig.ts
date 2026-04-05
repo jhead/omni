@@ -11,11 +11,12 @@ export function mergeProxyConfigPartial(
         ? { ...base.listen, ...patch.listen }
         : base.listen,
     upstreamBaseUrl: patch.upstreamBaseUrl ?? base.upstreamBaseUrl,
+    passthrough: patch.passthrough !== undefined ? patch.passthrough : base.passthrough,
     model: patch.model ?? base.model,
     toolAllowlist:
       patch.toolAllowlist !== undefined
         ? [...patch.toolAllowlist]
-        : [...base.toolAllowlist],
+        : [...(base.toolAllowlist ?? [])],
     logging: mergeLogging(base.logging, patch.logging),
     stripAdaptiveThinkingForModels:
       patch.stripAdaptiveThinkingForModels !== undefined

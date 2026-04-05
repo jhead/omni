@@ -35,16 +35,34 @@ export function validateProxyConfig(config: ProxyConfig): void {
     throw new TypeError("config.upstreamBaseUrl must be http(s)");
   }
 
-  if (!isNonEmptyString(config.model)) {
-    throw new TypeError("config.model must be a non-empty string");
-  }
+  const passthrough = config.passthrough !== false;
 
-  if (!Array.isArray(config.toolAllowlist)) {
-    throw new TypeError("config.toolAllowlist must be an array");
-  }
-  for (const name of config.toolAllowlist) {
-    if (typeof name !== "string" || name.trim() === "") {
-      throw new TypeError("config.toolAllowlist must contain only non-empty strings");
+  if (!passthrough) {
+    if (!isNonEmptyString(config.model)) {
+      throw new TypeError("config.model must be a non-empty string when passthrough is false");
+    }
+
+    if (!Array.isArray(config.toolAllowlist)) {
+      throw new TypeError("config.toolAllowlist must be an array when passthrough is false");
+    }
+    for (const name of config.toolAllowlist) {
+      if (typeof name !== "string" || name.trim() === "") {
+        throw new TypeError("config.toolAllowlist must contain only non-empty strings");
+      }
+    }
+  } else {
+    if (config.model !== undefined && !isNonEmptyString(config.model)) {
+      throw new TypeError("config.model must be a non-empty string when set");
+    }
+    if (config.toolAllowlist !== undefined) {
+      if (!Array.isArray(config.toolAllowlist)) {
+        throw new TypeError("config.toolAllowlist must be an array when set");
+      }
+      for (const name of config.toolAllowlist) {
+        if (typeof name !== "string" || name.trim() === "") {
+          throw new TypeError("config.toolAllowlist must contain only non-empty strings");
+        }
+      }
     }
   }
 
