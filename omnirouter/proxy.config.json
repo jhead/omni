@@ -1,0 +1,36 @@
+{
+  "listen": { "hostname": "127.0.0.1", "port": 3456 },
+  "logging": {
+    "incomingRequest": false,
+    "outgoingRequest": false,
+    "response": false,
+    "maxBodyBytes": 1048576
+  },
+  "upstreamBaseUrl": "https://api.anthropic.com",
+  "model": "claude-haiku-4-5-20251001",
+  "stripAdaptiveThinkingForModels": [
+    "claude-haiku-4-5-20251001",
+    "claude-haiku-4-5"
+  ],
+  "toolAllowlist": [
+    "Agent",
+    "AskUserQuestion",
+    "Bash",
+    "Edit",
+    "Glob",
+    "Grep",
+    "LSP",
+    "Read",
+    "TaskCreate",
+    "TaskGet",
+    "TaskList",
+    "TaskOutput",
+    "TaskStop",
+    "TaskUpdate",
+    "WebFetch",
+    "WebSearch",
+    "Write",
+    "mcp__omni__omni_context",
+    "mcp__omni__omni_dispatch"
+  ]
+}
