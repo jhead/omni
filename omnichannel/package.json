@@ -4,6 +4,7 @@
   "type": "module",
   "workspaces": ["packages/*", "packages/channels/*"],
   "dependencies": {
+    "@omnibot/channel-agent-bus": "workspace:*",
     "@omnibot/channel-alertmanager": "workspace:*",
     "@omnibot/channel-discord": "workspace:*",
     "@omnibot/channel-o2o": "workspace:*",

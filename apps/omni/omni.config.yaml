@@ -1,0 +1,24 @@
+gateway:
+  httpPort: 8080
+  httpHostname: "127.0.0.1"
+  ipcSocketPath: ./data/omni-gateway.sock
+  dbPath: ./data/omni.sqlite
+
+omniServer:
+  hostname: "127.0.0.1"
+  port: 9090
+  bearerToken: "change-me"
+
+agents:
+  baseDir: ./data/agents
+  defaultCmd: ["claude"]
+  defaultCols: 120
+  defaultRows: 40
+  omnirouterUrl: "http://127.0.0.1:3456"
+  templateDir: null
+
+channels:
+  demo:
+    plugin: channel-webhook
+  agent-bus:
+    plugin: channel-agent-bus

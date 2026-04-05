@@ -1,0 +1,12 @@
+{
+  "name": "@omnibot/channel-agent-bus",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@omnibot/core": "workspace:*",
+    "@omnibot/gateway": "workspace:*"
+  }
+}

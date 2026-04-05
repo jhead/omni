@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Omni — agents</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css" />
+    <style>
+      :root {
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        background: #0f1115;
+        color: #e8eaef;
+      }
+      body {
+        margin: 0;
+        padding: 1rem 1.25rem 2rem;
+        box-sizing: border-box;
+        min-height: 100vh;
+      }
+      .shell {
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-weight: 600;
+        font-size: 1.35rem;
+        margin: 0 0 1rem;
+      }
+      label {
+        display: block;
+        margin-bottom: 0.35rem;
+        font-size: 0.85rem;
+        color: #9aa3b5;
+      }
+      input[type="password"],
+      input[type="text"] {
+        width: 100%;
+        max-width: 420px;
+        padding: 0.5rem 0.65rem;
+        border-radius: 6px;
+        border: 1px solid #2a3140;
+        background: #161a22;
+        color: inherit;
+        box-sizing: border-box;
+      }
+      button {
+        cursor: pointer;
+        border-radius: 6px;
+        border: 1px solid #3d4a63;
+        background: #1e2636;
+        color: #e8eaef;
+        padding: 0.45rem 0.85rem;
+        font-size: 0.9rem;
+      }
+      button:hover {
+        background: #2a3448;
+      }
+      .row {
+        margin-bottom: 1rem;
+      }
+      .toolbar {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        align-items: center;
+        margin: 0.75rem 0 1rem;
+      }
+      .err {
+        color: #f87171;
+        font-size: 0.9rem;
+        margin: 0.5rem 0;
+      }
+      code {
+        font-size: 0.75rem;
+        color: #b8c0d4;
+        word-break: break-all;
+      }
+      .tile-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
+        gap: 12px;
+        margin-top: 0.5rem;
+      }
+      .tile {
+        display: flex;
+        flex-direction: column;
+        border: 1px solid #2a3140;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #12151c;
+        min-height: 300px;
+      }
+      .tile-head {
+        flex-shrink: 0;
+        padding: 0.45rem 0.65rem;
+        font-size: 0.75rem;
+        background: #161a22;
+        border-bottom: 1px solid #2a3140;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.5rem;
+      }
+      .tile-head a {
+        color: #7ab8ff;
+        white-space: nowrap;
+        font-size: 0.72rem;
+      }
+      .tile-head .meta {
+        color: #7a8499;
+        font-size: 0.68rem;
+        margin-top: 0.2rem;
+      }
+      .term-host {
+        flex: 1;
+        min-height: 220px;
+        padding: 4px;
+        box-sizing: border-box;
+      }
+      .term-host--inactive {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #7a8499;
+        font-size: 0.85rem;
+        padding: 1rem;
+        text-align: center;
+      }
+      .empty-tiles {
+        grid-column: 1 / -1;
+        padding: 2rem 1rem;
+        text-align: center;
+        color: #7a8499;
+        border: 1px dashed #2a3140;
+        border-radius: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <h1>Omni agents</h1>
+      <div class="row">
+        <label for="token">Bearer token (stored in localStorage)</label>
+        <input id="token" type="password" autocomplete="off" placeholder="change-me" />
+      </div>
+      <div class="toolbar">
+        <button type="button" id="save">Save token</button>
+        <button type="button" id="refresh">Refresh</button>
+        <button type="button" id="spawn">Spawn agent</button>
+      </div>
+      <div id="err" class="err" hidden></div>
+      <section id="tiles" class="tile-grid" aria-label="Agent terminals"></section>
+    </div>
+    <script type="module" src="./dashboard.ts"></script>
+  </body>
+</html>
