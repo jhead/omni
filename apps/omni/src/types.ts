@@ -23,9 +23,6 @@ export interface OmnirouterAppConfig {
 
 export interface AgentsConfig {
   baseDir: string
-  defaultCmd: [string, ...string[]]
-  defaultCols: number
-  defaultRows: number
   /**
    * SQLite registry for agent metadata (survives restarts; PTYs are still recreated via Restart).
    * Resolved relative to the directory containing `omni.config.yaml`.
@@ -36,7 +33,35 @@ export interface AgentsConfig {
    * When omnirouter is enabled, the app derives the URL from `omnirouter.listen` and ignores this.
    */
   omnirouterUrl: string | null
+  /**
+   * When `channels` includes `channel-agent-bus`, each new MCP HTTP session auto-subscribes to this
+   * topic so agents receive peer traffic without calling `subscribe` first.
+   * Omit → use `omni-agents`. Set to `null` or `false` in YAML to disable.
+   */
+  agentBusAutoSubscribeTopic: string | null | undefined
+}
+
+/** YAML-only seed for the `default` agent template row (used when DB has no `default` yet). */
+export interface DeprecatedAgentsTemplateSeed {
+  templateDir?: string | null
+  defaultCmd?: [string, ...string[]]
+  defaultCols?: number
+  defaultRows?: number
+}
+
+/** Persisted row in `omni_agent_templates`. */
+export interface AgentTemplateRow {
+  id: string
+  name: string
+  isSystem: boolean
+  /** Relative to `omni.config.yaml` directory, or absolute path. */
   templateDir: string | null
+  claudeMd: string | null
+  /** Partial JSON merged into agent `.claude/settings.json`. */
+  settingsJson: Record<string, unknown> | null
+  defaultCmd: [string, ...string[]] | null
+  defaultCols: number | null
+  defaultRows: number | null
 }
 
 /** Full app config: gateway IPC/HTTP + channels + control plane + agents + omnirouter. */
@@ -44,4 +69,8 @@ export interface OmniConfig extends LoadedGatewayConfig {
   omniServer: OmniServerConfig
   agents: AgentsConfig
   omnirouter: OmnirouterAppConfig
+  /**
+   * Present when deprecated YAML keys under `agents:` were used; seeds the `default` template once if missing.
+   */
+  deprecatedAgentsTemplateSeed?: DeprecatedAgentsTemplateSeed
 }

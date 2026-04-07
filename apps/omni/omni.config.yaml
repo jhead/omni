@@ -24,10 +24,9 @@ omnirouter:
 
 agents:
   baseDir: ./data/agents
-  defaultCmd: ["claude", "--dangerously-skip-permissions", "--dangerously-load-development-channels", "server:omni"]
-  defaultCols: 120
-  defaultRows: 40
-  templateDir: null
+  # With `channel-agent-bus`, each MCP session auto-subscribes to this topic (default: omni-agents). Set to null to disable.
+  # agentBusAutoSubscribeTopic: omni-agents
+  # Spawn defaults and templateDir live in the `default` agent template (GET/PATCH /api/agent-templates/default).
   # Required only when omnirouter.enabled is false (external router):
   # omnirouterUrl: "http://127.0.0.1:3456"
 

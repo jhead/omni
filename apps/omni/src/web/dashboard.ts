@@ -29,7 +29,35 @@ async function api(path: string, init?: RequestInit): Promise<Response> {
 
 type AgentRow = { id: string; status: string; exitCode?: number | null }
 
+type TemplateRow = { id: string; name: string }
+
 let attached: AttachedTerminal[] = []
+
+async function refreshTemplates(): Promise<boolean> {
+  const sel = document.getElementById('spawn-template') as HTMLSelectElement | null
+  if (!sel) return true
+  const res = await api('/api/agent-templates')
+  if (!res.ok) {
+    setError(`GET /api/agent-templates: ${res.status} ${await res.text()}`)
+    sel.innerHTML = ''
+    return false
+  }
+  const data = (await res.json()) as { templates: TemplateRow[] }
+  const prev = sel.value
+  sel.innerHTML = ''
+  for (const t of data.templates) {
+    const opt = document.createElement('option')
+    opt.value = t.id
+    opt.textContent = t.name === t.id ? t.id : `${t.name} (${t.id})`
+    sel.appendChild(opt)
+  }
+  if (prev && [...sel.options].some(o => o.value === prev)) {
+    sel.value = prev
+  } else if ([...sel.options].some(o => o.value === 'default')) {
+    sel.value = 'default'
+  }
+  return true
+}
 
 function disposeAllTerminals(): void {
   for (const a of attached) {
@@ -113,6 +141,13 @@ function escapeHtml(s: string): string {
 }
 
 async function refreshList(): Promise<void> {
+  const templatesOk = await refreshTemplates()
+  if (!templatesOk) {
+    disposeAllTerminals()
+    const section = document.getElementById('tiles')
+    if (section) section.innerHTML = ''
+    return
+  }
   setError('')
   const res = await api('/api/agents')
   if (!res.ok) {
@@ -128,10 +163,12 @@ async function refreshList(): Promise<void> {
 
 async function spawnAgent(): Promise<void> {
   setError('')
+  const sel = document.getElementById('spawn-template') as HTMLSelectElement | null
+  const templateId = sel?.value?.trim() || 'default'
   const res = await api('/api/agents', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: '{}',
+    body: JSON.stringify({ templateId }),
   })
   if (!res.ok) {
     setError(`POST /api/agents: ${res.status} ${await res.text()}`)

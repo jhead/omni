@@ -58,12 +58,19 @@ export function createOmniMcpHttpSession(hub: OmniMcpHubLike): OmniMcpHttpSessio
   return { mcp, notifyTransportReady, dispose }
 }
 
+export type OmniMcpHttpAutoSubscribe = {
+  channelId: string
+  topic: string
+}
+
 /**
  * Streamable HTTP MCP: POST (initialize + JSON-RPC), GET (SSE), DELETE (session end).
  */
 export function createOmniMcpHttpFetchHandler(ctx: {
   mcpPath: string
   hub: OmniMcpHubLike
+  /** When set, invokes agent-bus `subscribe` after each session is transport-ready (e.g. shared peer topic). */
+  autoSubscribe?: OmniMcpHttpAutoSubscribe | null
 }): (req: Request) => Promise<Response> {
   const transports = new Map<string, WebStandardStreamableHTTPServerTransport>()
   const sessions = new Map<string, OmniMcpHttpSession>()
@@ -110,6 +117,20 @@ export function createOmniMcpHttpFetchHandler(ctx: {
             transports.set(sid, transport)
             if (sid) sessions.set(sid, { mcp, notifyTransportReady, dispose })
             notifyTransportReady()
+            const sub = ctx.autoSubscribe
+            if (sub) {
+              const r = await ctx.hub.invokeInProcess({
+                id: randomUUID(),
+                channelId: sub.channelId,
+                capability: 'subscribe',
+                args: { topic: sub.topic },
+              })
+              if (!r.ok) {
+                process.stderr.write(
+                  `omnichannel mcp http: auto-subscribe failed (${sub.channelId} topic=${sub.topic}): ${r.error}\n`,
+                )
+              }
+            }
           },
           onsessionclosed: async sid => {
             transports.delete(sid)

@@ -9,8 +9,10 @@ import { createOmnirouter } from '@omnibot/omnirouter'
 
 import { gatewayMcpHttpUrl } from './agent-config.ts'
 import { AgentManager } from './agent-manager.ts'
+import { AgentPersistence } from './agent-persistence.ts'
 import { loadOmniAppConfig } from './config.ts'
 import { startGatewayHost } from './gateway-host.ts'
+import { resolveMcpAutoSubscribe } from './mcp-auto-subscribe.ts'
 import { buildOmnirouterProxyConfig, resolveAnthropicProxyBaseUrl } from './omnirouter-config.ts'
 import { startOmniServer } from './omni-server.ts'
 
@@ -38,24 +40,39 @@ async function main(): Promise<void> {
   const anthropicProxyUrl = resolveAnthropicProxyBaseUrl(cfg)
 
   const debug = process.env.OMNI_DEBUG === '1' || process.env.OMNI_DEBUG === 'true'
-  await startGatewayHost(cfg, { debug })
+  await startGatewayHost(cfg, { debug, mcpAutoSubscribe: resolveMcpAutoSubscribe(cfg) })
 
   const ipcAbs = resolveGatewayIpcSocketPath(cfg)
 
   const mux = createOmnimux({
-    cols: cfg.agents.defaultCols,
-    rows: cfg.agents.defaultRows,
+    cols: 120,
+    rows: 40,
   })
 
   const agentsDbAbs = resolve(dirname(cfg.configPath), cfg.agents.persistenceDbPath)
   ensureParentDir(agentsDbAbs)
+
+  const persistence = new AgentPersistence(agentsDbAbs)
+  persistence.ensureDefaultTemplateSeed({
+    deprecatedYaml: cfg.deprecatedAgentsTemplateSeed,
+    fallbackTemplateDirRel: '../../reference/template',
+    fallbackDefaultCmd: [
+      'claude',
+      '--dangerously-skip-permissions',
+      '--dangerously-load-development-channels',
+      'server:omni',
+    ],
+    fallbackCols: 120,
+    fallbackRows: 40,
+  })
 
   const agentManager = new AgentManager(
     cfg.agents,
     mux,
     gatewayMcpHttpUrl(cfg),
     anthropicProxyUrl,
-    agentsDbAbs,
+    persistence,
+    cfg.configPath,
   )
 
   const server = startOmniServer({

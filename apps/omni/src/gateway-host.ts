@@ -61,6 +61,8 @@ async function importChannelModules(
 export interface StartGatewayHostOptions {
   extraPlugins?: Array<{ pluginId: string; host: GatewayPluginHost }>
   debug?: boolean
+  /** Passed to {@link createOmniMcpHttpFetchHandler} when MCP HTTP is enabled. */
+  mcpAutoSubscribe?: { channelId: string; topic: string } | null
 }
 
 export async function startGatewayHost(
@@ -168,7 +170,11 @@ export async function startGatewayHost(
         const url = new URL(req.url)
         if (url.pathname === mcpPath) {
           if (!mcpHttpFetch) {
-            mcpHttpFetch = createOmniMcpHttpFetchHandler({ mcpPath, hub: io.hub })
+            mcpHttpFetch = createOmniMcpHttpFetchHandler({
+              mcpPath,
+              hub: io.hub,
+              autoSubscribe: options?.mcpAutoSubscribe ?? null,
+            })
           }
           return mcpHttpFetch(req)
         }

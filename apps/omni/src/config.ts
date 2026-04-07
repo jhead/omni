@@ -4,7 +4,13 @@ import { resolve } from 'node:path'
 import { parseGatewayDocument, type LoadedGatewayConfig } from '@omnibot/gateway'
 import { parse as parseYaml } from 'yaml'
 
-import type { AgentsConfig, OmniConfig, OmniServerConfig, OmnirouterAppConfig } from './types.ts'
+import type {
+  AgentsConfig,
+  DeprecatedAgentsTemplateSeed,
+  OmniConfig,
+  OmniServerConfig,
+  OmnirouterAppConfig,
+} from './types.ts'
 
 function isRecord(x: unknown): x is Record<string, unknown> {
   return x !== null && typeof x === 'object' && !Array.isArray(x)
@@ -27,47 +33,82 @@ function parseOmniServer(raw: unknown): OmniServerConfig {
   return { hostname, port, bearerToken }
 }
 
-function parseAgents(raw: unknown): AgentsConfig {
+const DEPRECATED_AGENT_YAML_KEYS = ['templateDir', 'defaultCmd', 'defaultCols', 'defaultRows'] as const
+
+function parseAgents(raw: unknown): {
+  agents: AgentsConfig
+  deprecatedTemplateSeed?: DeprecatedAgentsTemplateSeed
+} {
   if (!isRecord(raw)) {
     throw new Error('omni config: agents must be an object')
   }
   const baseDir =
     typeof raw.baseDir === 'string' && raw.baseDir.trim() ? raw.baseDir.trim() : './data/agents'
-  const dc = raw.defaultCmd
-  let defaultCmd: [string, ...string[]]
-  if (Array.isArray(dc) && dc.length > 0 && dc.every((x): x is string => typeof x === 'string')) {
-    defaultCmd = [dc[0]!, ...dc.slice(1)]
-  } else {
-    defaultCmd = ['claude']
-  }
-  const defaultCols =
-    typeof raw.defaultCols === 'number' && Number.isFinite(raw.defaultCols) ? raw.defaultCols : 120
-  const defaultRows =
-    typeof raw.defaultRows === 'number' && Number.isFinite(raw.defaultRows) ? raw.defaultRows : 40
   const omnirouterUrl =
     typeof raw.omnirouterUrl === 'string' && raw.omnirouterUrl.trim() ?
       raw.omnirouterUrl.trim().replace(/\/$/, '')
     : null
-  const templateDir =
-    raw.templateDir === null || raw.templateDir === undefined ?
-      null
-    : typeof raw.templateDir === 'string' ?
-      raw.templateDir
-    : (() => {
-        throw new Error('omni config: agents.templateDir must be a string or null')
-      })()
   const persistenceDbPath =
     typeof raw.persistenceDbPath === 'string' && raw.persistenceDbPath.trim() ?
       raw.persistenceDbPath.trim()
     : './data/omni-agents.sqlite'
+
+  const hasDeprecatedYaml = DEPRECATED_AGENT_YAML_KEYS.some(
+    k => k in raw && raw[k as keyof typeof raw] !== undefined,
+  )
+  let deprecatedTemplateSeed: DeprecatedAgentsTemplateSeed | undefined
+  if (hasDeprecatedYaml) {
+    console.warn(
+      '[omni config] agents.templateDir, defaultCmd, defaultCols, defaultRows are deprecated; ' +
+        'configure the `default` row via GET/PATCH /api/agent-templates/default (seeded once from YAML if the DB was empty).',
+    )
+    const dc = raw.defaultCmd
+    let defaultCmd: [string, ...string[]] | undefined
+    if (Array.isArray(dc) && dc.length > 0 && dc.every((x): x is string => typeof x === 'string')) {
+      defaultCmd = [dc[0]!, ...dc.slice(1)]
+    }
+    const defaultCols =
+      typeof raw.defaultCols === 'number' && Number.isFinite(raw.defaultCols) ? raw.defaultCols : undefined
+    const defaultRows =
+      typeof raw.defaultRows === 'number' && Number.isFinite(raw.defaultRows) ? raw.defaultRows : undefined
+    const templateDir =
+      raw.templateDir === null || raw.templateDir === undefined ?
+        undefined
+      : typeof raw.templateDir === 'string' ?
+        raw.templateDir
+      : (() => {
+          throw new Error('omni config: agents.templateDir must be a string or null')
+        })()
+    deprecatedTemplateSeed = {}
+    if (templateDir !== undefined) deprecatedTemplateSeed.templateDir = templateDir
+    if (defaultCmd !== undefined) deprecatedTemplateSeed.defaultCmd = defaultCmd
+    if (defaultCols !== undefined) deprecatedTemplateSeed.defaultCols = defaultCols
+    if (defaultRows !== undefined) deprecatedTemplateSeed.defaultRows = defaultRows
+  }
+
+  let agentBusAutoSubscribeTopic: string | null | undefined
+  const abs = raw.agentBusAutoSubscribeTopic
+  if (abs === undefined) {
+    agentBusAutoSubscribeTopic = undefined
+  } else if (abs === null || abs === false) {
+    agentBusAutoSubscribeTopic = null
+  } else if (typeof abs === 'string') {
+    const t = abs.trim()
+    agentBusAutoSubscribeTopic = t === '' ? null : t
+  } else {
+    throw new Error(
+      'omni config: agents.agentBusAutoSubscribeTopic must be a string, null, or false',
+    )
+  }
+
   return {
-    baseDir,
-    defaultCmd,
-    defaultCols,
-    defaultRows,
-    persistenceDbPath,
-    omnirouterUrl,
-    templateDir,
+    agents: {
+      baseDir,
+      persistenceDbPath,
+      omnirouterUrl,
+      agentBusAutoSubscribeTopic,
+    },
+    deprecatedTemplateSeed,
   }
 }
 
@@ -194,7 +235,7 @@ export function loadOmniAppConfig(path?: string): OmniConfig {
 
   const base = parseGatewayDocument(doc) as Omit<LoadedGatewayConfig, 'configPath'>
   const omniServer = parseOmniServer(doc.omniServer)
-  const agents = parseAgents(doc.agents)
+  const { agents, deprecatedTemplateSeed } = parseAgents(doc.agents ?? {})
   const omnirouter = parseOmnirouter(doc.omnirouter)
 
   if (!omnirouter.enabled && !agents.omnirouterUrl?.trim()) {
@@ -209,5 +250,6 @@ export function loadOmniAppConfig(path?: string): OmniConfig {
     omniServer,
     agents,
     omnirouter,
+    ...(deprecatedTemplateSeed !== undefined ? { deprecatedAgentsTemplateSeed: deprecatedTemplateSeed } : {}),
   }
 }

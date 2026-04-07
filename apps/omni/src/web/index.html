@@ -32,6 +32,16 @@
         font-size: 0.85rem;
         color: #9aa3b5;
       }
+      select {
+        width: 100%;
+        max-width: 420px;
+        padding: 0.5rem 0.65rem;
+        border-radius: 6px;
+        border: 1px solid #2a3140;
+        background: #161a22;
+        color: inherit;
+        box-sizing: border-box;
+      }
       input[type="password"],
       input[type="text"] {
         width: 100%;
@@ -153,6 +163,10 @@
       <div class="row">
         <label for="token">Bearer token (stored in localStorage)</label>
         <input id="token" type="password" autocomplete="off" placeholder="change-me" />
+      </div>
+      <div class="row">
+        <label for="spawn-template">Template (layered on <code>default</code>)</label>
+        <select id="spawn-template" aria-label="Agent template"></select>
       </div>
       <div class="toolbar">
         <button type="button" id="save">Save token</button>
